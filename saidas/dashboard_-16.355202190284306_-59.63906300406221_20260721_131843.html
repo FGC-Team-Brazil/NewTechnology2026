@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Revivetech — Dossiê Regional</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
+<script id="dados-json" type="application/json">{"coordenadas": {"latitude": -16.355202190284306, "longitude": -59.63906300406221}, "data_hora_consultada": "2026-07-16T12:00:00", "gerado_em_utc": "2026-07-21T16:18:36.495809+00:00", "dentro_do_brasil_aprox": true, "erros": {"bioma_e_vegetacao": "Arquivo não encontrado: dados_locais/biomas_ibge.geojson (baixe a camada uma vez e aponte o caminho correto — ver docstring do módulo)", "risco_erosao": "Arquivo não encontrado: dados_locais/risco_erosao_embrapa.geojson (baixe a camada uma vez e aponte o caminho correto — ver docstring do módulo)", "historico_queimadas_local": "Banco de queimadas não encontrado em: dados_locais/queimadas_inpe.db (aponte para o banco gerado na Fase 1 do projeto)", "distancia_agua": "429 Client Error: Too Many Requests for url: https://overpass-api.de/api/interpreter"}, "uso_do_solo": {"uso_do_solo": null, "observacao": "MapBiomas desativado — requer cadastro no Earth Engine (ver docstring da função coletar_uso_do_solo_mapbiomas)"}, "localizacao": {"nome_exibicao": "Colonia San Mateo, San Ignacio de Velasco, Velasco, Santa Cruz, Bolivia", "pais": "Bolivia", "estado": "Santa Cruz", "municipio": "San Ignacio de Velasco", "bairro_distrito": null, "cep_aproximado": null, "osm_tipo": "administrative", "osm_categoria": "boundary", "osm_id": 19742952}, "declividade_relevo": {"declividade_pct_estimada": 5.0, "classificacao_relevo": "suave ondulado", "distancia_amostragem_m": 100.0, "elevacoes_pontos_m": {"centro": 237.0, "norte": 233.0, "sul": 235.0, "leste": 232.0, "oeste": 238.0}, "observacao": "estimativa por grid de 5 pontos (Open-Meteo); para precisão maior, use SRTM local"}, "clima_historico": {"data_hora_solicitada": "2026-07-16T12:00:00", "data_hora_encontrada": "2026-07-16T12:00", "temperatura_c": 31.6, "umidade_relativa_pct": 52, "precipitacao_mm": 0.1, "vento_kmh": 17.4, "direcao_vento_graus": 332, "pressao_hpa": 987.1, "cobertura_nuvens_pct": 10}, "qualidade_do_ar": {"pm10": 13.0, "pm2_5": 11.9, "monoxido_de_carbono": 179.0, "dioxido_de_nitrogenio": 0.7, "ozonio": 65.0, "indice_uv": 7.65, "indice_qualidade_ar_europeu": 35}, "normais_climatologicas": {"fonte": "NASA POWER (série histórica 1991-2020)", "media_anual": {"temp_media_c": 27.51, "umidade_relativa_pct": 61.14, "precipitacao_mm_dia": 2.85, "radiacao_solar_kwh_m2_dia": 18.18, "vento_m_s": 2.03}, "por_mes": {"JAN": {"temp_media_c": 27.81, "temp_max_c": 40.51, "temp_min_c": 18.11, "umidade_relativa_pct": 73.65, "precipitacao_mm_dia": 5.74, "radiacao_solar_kwh_m2_dia": 20.31, "vento_m_s": 2.03}, "FEB": {"temp_media_c": 27.21, "temp_max_c": 38.07, "temp_min_c": 17.23, "umidade_relativa_pct": 77.24, "precipitacao_mm_dia": 5.79, "radiacao_solar_kwh_m2_dia": 19.16, "vento_m_s": 1.88}, "MAR": {"temp_media_c": 27.31, "temp_max_c": 39.3, "temp_min_c": 15.06, "umidade_relativa_pct": 75.69, "precipitacao_mm_dia": 4.52, "radiacao_solar_kwh_m2_dia": 19.17, "vento_m_s": 1.66}, "APR": {"temp_media_c": 26.73, "temp_max_c": 38.24, "temp_min_c": 11.62, "umidade_relativa_pct": 71.69, "precipitacao_mm_dia": 2.2, "radiacao_solar_kwh_m2_dia": 18.16, "vento_m_s": 1.67}, "MAY": {"temp_media_c": 24.86, "temp_max_c": 37.27, "temp_min_c": 10.02, "umidade_relativa_pct": 67.49, "precipitacao_mm_dia": 1.76, "radiacao_solar_kwh_m2_dia": 15.13, "vento_m_s": 1.82}, "JUN": {"temp_media_c": 24.88, "temp_max_c": 38.58, "temp_min_c": 9.0, "umidade_relativa_pct": 58.76, "precipitacao_mm_dia": 0.7, "radiacao_solar_kwh_m2_dia": 14.94, "vento_m_s": 1.98}, "JUL": {"temp_media_c": 25.57, "temp_max_c": 39.18, "temp_min_c": 6.74, "umidade_relativa_pct": 46.8, "precipitacao_mm_dia": 0.34, "radiacao_solar_kwh_m2_dia": 16.34, "vento_m_s": 2.17}, "AUG": {"temp_media_c": 27.68, "temp_max_c": 42.55, "temp_min_c": 9.99, "umidade_relativa_pct": 38.01, "precipitacao_mm_dia": 0.63, "radiacao_solar_kwh_m2_dia": 17.68, "vento_m_s": 2.33}, "SEP": {"temp_media_c": 29.68, "temp_max_c": 43.31, "temp_min_c": 11.41, "umidade_relativa_pct": 41.71, "precipitacao_mm_dia": 1.18, "radiacao_solar_kwh_m2_dia": 17.31, "vento_m_s": 2.3}, "OCT": {"temp_media_c": 30.53, "temp_max_c": 44.12, "temp_min_c": 16.04, "umidade_relativa_pct": 52.72, "precipitacao_mm_dia": 2.77, "radiacao_solar_kwh_m2_dia": 19.12, "vento_m_s": 2.28}, "NOV": {"temp_media_c": 29.5, "temp_max_c": 42.55, "temp_min_c": 15.62, "umidade_relativa_pct": 60.88, "precipitacao_mm_dia": 3.77, "radiacao_solar_kwh_m2_dia": 20.51, "vento_m_s": 2.13}, "DEC": {"temp_media_c": 28.38, "temp_max_c": 40.26, "temp_min_c": 16.37, "umidade_relativa_pct": 70.09, "precipitacao_mm_dia": 4.97, "radiacao_solar_kwh_m2_dia": 20.41, "vento_m_s": 2.1}}}, "elevacao_e_fuso": {"elevacao_m": 237.0, "fuso_horario": "America/La_Paz", "utc_offset_segundos": -14400}, "areas_protegidas_proximas": [], "distancia_vegetacao_nativa": {"fragmento_vegetacao_mais_proximo": {"nome": "(sem nome no OSM)", "tipo": "wood", "distancia_km": 10.353}}, "solo": {"bdod": {"unidade": "kg/dm³ (densidade aparente)", "valores": {"0-5cm": 1.17, "5-15cm": 1.25}}, "cec": {"unidade": "cmol(c)/kg (CTC)", "valores": {"0-5cm": 10.6, "5-15cm": 7.9}}, "cfvo": {"unidade": "% (fragmentos grosseiros)", "valores": {"0-5cm": 2.2, "5-15cm": 2.3}}, "clay": {"unidade": "% (argila)", "valores": {"0-5cm": 22.5, "5-15cm": 22.9}}, "nitrogen": {"unidade": "g/kg (nitrogênio total)", "valores": {"0-5cm": 2.19, "5-15cm": 1.46}}, "ocd": {"unidade": "kg/m³ (densidade de carbono orgânico)", "valores": {"0-5cm": 29.8, "5-15cm": 23.1}}, "phh2o": {"unidade": "pH em água", "valores": {"0-5cm": 5.5, "5-15cm": 5.4}}, "sand": {"unidade": "% (areia)", "valores": {"0-5cm": 55.5, "5-15cm": 55.2}}, "silt": {"unidade": "% (silte)", "valores": {"0-5cm": 22.0, "5-15cm": 21.9}}, "soc": {"unidade": "g/kg (carbono orgânico do solo)", "valores": {"0-5cm": 20.9, "5-15cm": 15.8}}}}</script>
+<style>
+  :root{
+    --bg: #12171a;
+    --surface: #1a2320;
+    --surface-2: #212b27;
+    --border: #2c3833;
+    --text: #eae6da;
+    --text-muted: #8ea298;
+    --accent-moss: #74a888;
+    --accent-ember: #c1603e;
+    --accent-gold: #d7ac5c;
+    --accent-water: #5f93aa;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse at top left, rgba(116,168,136,0.06), transparent 45%),
+      radial-gradient(ellipse at bottom right, rgba(193,96,62,0.05), transparent 50%),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{max-width:1280px;margin:0 auto;padding:28px 24px 64px;}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    padding:20px 26px 24px;
+    margin-bottom:22px;
+    animation:fadeIn .5s ease both;
+  }
+  .hero-top{
+    display:flex;align-items:center;gap:10px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--text-muted);
+    margin-bottom:18px;
+  }
+  .hero-top .wordmark{color:var(--accent-moss);font-weight:600;}
+  .hero-top .timestamp{margin-left:auto;color:var(--text-muted);}
+  .hero-main{display:flex;align-items:flex-end;gap:32px;flex-wrap:wrap;}
+  .hero-place h1{
+    font-family:'Fraunces', serif;
+    font-weight:500;font-size:clamp(28px,4vw,40px);
+    margin:0 0 4px;letter-spacing:-0.01em;
+  }
+  .hero-place p{margin:0;color:var(--text-muted);font-size:14px;}
+  .hero-coords{
+    font-family:'IBM Plex Mono', monospace;
+    display:flex;flex-direction:column;gap:2px;
+  }
+  .hero-coords .coord-label{font-size:10px;letter-spacing:.14em;color:var(--text-muted);}
+  .hero-coords .coord-value{font-size:19px;color:var(--accent-gold);}
+  .biome-badge{display:flex;align-items:center;gap:12px;margin-left:auto;}
+  .biome-ring{
+    width:46px;height:46px;border-radius:50%;
+    background:conic-gradient(var(--accent-moss) 0 100%);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 1px var(--border);
+  }
+  .biome-ring::after{
+    content:'';width:34px;height:34px;border-radius:50%;background:var(--bg);
+  }
+  .biome-text{display:flex;flex-direction:column;font-family:'IBM Plex Mono',monospace;}
+  .biome-text .biome-label{font-size:10px;letter-spacing:.14em;color:var(--text-muted);}
+  .biome-text .biome-name{font-size:14px;color:var(--text);}
+
+  /* ---------- LAYOUT ---------- */
+  .grid-main{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-bottom:18px;}
+  @media (max-width:920px){.grid-main{grid-template-columns:1fr;}}
+
+  .map-panel{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);}
+  .map-frame{position:relative;height:100%;min-height:420px;}
+  #map{position:absolute;inset:0;filter:saturate(1.05) contrast(1.03);}
+  .reticle{position:absolute;width:22px;height:22px;border-color:var(--accent-gold);opacity:.85;z-index:500;pointer-events:none;}
+  .reticle.tl{top:10px;left:10px;border-top:2px solid;border-left:2px solid;}
+  .reticle.tr{top:10px;right:10px;border-top:2px solid;border-right:2px solid;}
+  .reticle.bl{bottom:10px;left:10px;border-bottom:2px solid;border-left:2px solid;}
+  .reticle.br{bottom:10px;right:10px;border-bottom:2px solid;border-right:2px solid;}
+  .map-legend{
+    position:absolute;bottom:10px;left:42px;z-index:500;
+    display:flex;gap:14px;flex-wrap:wrap;
+    background:rgba(18,23,26,0.78);backdrop-filter:blur(3px);
+    border:1px solid var(--border);border-radius:8px;
+    padding:6px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text-muted);
+  }
+  .map-legend span{display:flex;align-items:center;gap:5px;}
+  .map-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+
+  .priority-modules{display:flex;flex-direction:column;gap:14px;}
+
+  .modules-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+    gap:14px;margin-bottom:18px;
+  }
+
+  /* ---------- CARDS ---------- */
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 18px;
+    animation:fadeIn .5s ease both;
+    transition:border-color .15s ease, transform .15s ease;
+  }
+  .card:hover{border-color:var(--accent-moss);transform:translateY(-1px);}
+  .card.unavailable{opacity:.55;}
+  .card .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.14em;
+    color:var(--accent-moss);text-transform:uppercase;margin-bottom:6px;display:block;
+  }
+  .card h3{font-family:'Fraunces',serif;font-weight:500;font-size:17px;margin:0 0 10px;}
+  .card .stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13.5px;}
+  .card .stat-row:last-child{border-bottom:none;}
+  .card .stat-row .k{color:var(--text-muted);}
+  .card .stat-row .v{font-family:'IBM Plex Mono',monospace;color:var(--text);text-align:right;}
+  .card .big-stat{font-family:'IBM Plex Mono',monospace;font-size:26px;color:var(--accent-gold);}
+  .card .sub{color:var(--text-muted);font-size:12.5px;margin-top:2px;}
+  .card .note{font-size:12px;color:var(--text-muted);margin-top:8px;font-style:italic;}
+  .chip{
+    display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;
+    font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-muted);
+    margin:2px 4px 0 0;
+  }
+  .chip.ember{color:var(--accent-ember);border-color:var(--accent-ember);}
+  .chip.moss{color:var(--accent-moss);border-color:var(--accent-moss);}
+  .chip.gold{color:var(--accent-gold);border-color:var(--accent-gold);}
+  .chart-wrap{height:150px;margin-top:8px;}
+  .soil-table{width:100%;border-collapse:collapse;font-size:12px;font-family:'IBM Plex Mono',monospace;}
+  .soil-table th{text-align:left;color:var(--text-muted);font-weight:500;font-size:10.5px;padding-bottom:6px;}
+  .soil-table td{padding:3px 0;border-top:1px dashed var(--border);}
+  .protected-list{list-style:none;margin:0;padding:0;}
+  .protected-list li{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border);font-size:13px;}
+  .protected-list li:last-child{border-bottom:none;}
+
+  /* ---------- DIAGNOSTICS ---------- */
+  .diagnostics{
+    border:1px solid var(--accent-ember);border-radius:var(--radius);
+    background:rgba(193,96,62,0.06);padding:16px 18px;
+  }
+  .diagnostics h2{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;
+    color:var(--accent-ember);text-transform:uppercase;margin:0 0 10px;
+  }
+  .diagnostics ul{margin:0;padding-left:18px;font-size:13px;color:var(--text-muted);}
+  .diagnostics li{margin-bottom:4px;}
+  .diagnostics code{color:var(--accent-ember);}
+
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  @media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important;}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="hero">
+    <div class="hero-top">
+      <span class="wordmark">REVIVETECH</span>
+      <span>›</span>
+      <span>DOSSIÊ REGIONAL</span>
+      <span class="timestamp" id="js-timestamp"></span>
+    </div>
+    <div class="hero-main">
+      <div class="hero-place">
+        <h1 id="js-municipio">—</h1>
+        <p id="js-estado-pais"></p>
+      </div>
+      <div class="hero-coords">
+        <span class="coord-label">LAT / LON</span>
+        <span class="coord-value" id="js-coords">—, —</span>
+      </div>
+      <div class="biome-badge">
+        <div class="biome-ring" id="js-biome-ring"></div>
+        <div class="biome-text">
+          <span class="biome-label">BIOMA</span>
+          <span class="biome-name" id="js-biome-name">—</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid-main">
+    <section class="map-panel">
+      <div class="map-frame">
+        <div id="map"></div>
+        <div class="reticle tl"></div>
+        <div class="reticle tr"></div>
+        <div class="reticle bl"></div>
+        <div class="reticle br"></div>
+        <div class="map-legend" id="js-map-legend"></div>
+      </div>
+    </section>
+
+    <section class="priority-modules" id="js-priority-modules"></section>
+  </div>
+
+  <section class="modules-grid" id="js-secondary-modules"></section>
+
+  <footer class="diagnostics" id="js-diagnostics" hidden>
+    <h2>Diagnóstico da coleta</h2>
+    <ul id="js-diagnostics-list"></ul>
+  </footer>
+
+</div>
+
+<script>
+const DADOS = JSON.parse(document.getElementById('dados-json').textContent);
+
+const BIOMA_COR = {
+  "Amazônia": "#2f6b4f", "Cerrado": "#c08a3e", "Mata Atlântica": "#3e8564",
+  "Caatinga": "#b97a46", "Pampa": "#8a9b4e", "Pantanal": "#3e8c93"
+};
+
+function fmt(v, unit = "", fallback = "—"){
+  if (v === null || v === undefined || v === "") return fallback;
+  return `${v}${unit}`;
+}
+
+function el(tag, cls, html){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+function card({eyebrow, title, body, unavailable=false, note=null}){
+  const c = el('div', 'card' + (unavailable ? ' unavailable' : ''));
+  c.appendChild(el('span', 'eyebrow', eyebrow));
+  c.appendChild(el('h3', null, title));
+  const b = el('div', null, body);
+  c.appendChild(b);
+  if (note) c.appendChild(el('div', 'note', note));
+  return c;
+}
+
+function statRow(k, v){
+  return `<div class="stat-row"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+}
+
+// ---------- Header ----------
+document.getElementById('js-timestamp').textContent =
+  DADOS.data_hora_consultada ? `consulta histórica · ${DADOS.data_hora_consultada}` :
+  (DADOS.gerado_em_utc ? new Date(DADOS.gerado_em_utc).toLocaleString('pt-BR') : '');
+
+const loc = DADOS.localizacao || {};
+document.getElementById('js-municipio').textContent = loc.municipio || 'Localização não identificada';
+document.getElementById('js-estado-pais').textContent =
+  [loc.estado, loc.pais].filter(Boolean).join(' · ') || (DADOS.erros && DADOS.erros.localizacao ? 'fonte indisponível' : '');
+
+const lat = DADOS.coordenadas.latitude, lon = DADOS.coordenadas.longitude;
+document.getElementById('js-coords').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+const bioma = (DADOS.bioma_e_vegetacao || {}).bioma;
+document.getElementById('js-biome-name').textContent = bioma || 'não configurado';
+const ring = document.getElementById('js-biome-ring');
+ring.style.background = `conic-gradient(${BIOMA_COR[bioma] || '#74a888'} 0 100%)`;
+
+// ---------- Map ----------
+const map = L.map('map', {zoomControl:true, attributionControl:false}).setView([lat, lon], 13);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 18
+}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 18, opacity: 0.9
+}).addTo(map);
+
+const marker = L.circleMarker([lat, lon], {
+  radius: 7, color: '#d7ac5c', fillColor:'#d7ac5c', fillOpacity: 1, weight: 2
+}).addTo(map).bindPopup('Ponto consultado');
+
+const legendaItens = [];
+
+function raioCirculo(raioKm, cor, label){
+  if (!raioKm) return;
+  L.circle([lat, lon], {
+    radius: raioKm * 1000, color: cor, weight: 1.5, fillOpacity: 0.03, dashArray: '4 5'
+  }).addTo(map);
+  legendaItens.push(`<span><i style="background:${cor}"></i>${label} (${raioKm} km)</span>`);
+}
+raioCirculo((DADOS.areas_protegidas_proximas || []).length ? 15 : null, '#74a888', 'busca UCs');
+raioCirculo(10, '#5f93aa', 'busca água');
+raioCirculo(10, '#c1603e', 'busca vegetação nativa');
+
+const agua = (DADOS.distancia_agua || {}).corpo_dagua_mais_proximo;
+if (agua) legendaItens.push(`<span><i style="background:#5f93aa"></i>água a ${agua.distancia_km} km</span>`);
+const vegNativa = (DADOS.distancia_vegetacao_nativa || {}).fragmento_vegetacao_mais_proximo;
+if (vegNativa) legendaItens.push(`<span><i style="background:#c1603e"></i>mata a ${vegNativa.distancia_km} km</span>`);
+
+document.getElementById('js-map-legend').innerHTML = legendaItens.join('');
+
+// ---------- Priority modules ----------
+const priority = document.getElementById('js-priority-modules');
+
+// Clima
+(function(){
+  const historico = DADOS.data_hora_consultada;
+  const clima = historico ? (DADOS.clima_historico || {}) : (DADOS.clima_atual_e_previsao || {}).condicoes_atuais || {};
+  const indisponivel = DADOS.erros && (DADOS.erros.clima_atual_e_previsao || DADOS.erros.clima_historico);
+  priority.appendChild(card({
+    eyebrow: historico ? 'Clima · histórico' : 'Clima · agora',
+    title: 'Condições atmosféricas',
+    unavailable: !!indisponivel,
+    body: indisponivel ? '<p class="sub">Fonte indisponível nesta coleta.</p>' : `
+      <div class="big-stat">${fmt(clima.temperatura_c, ' °C')}</div>
+      ${statRow('Umidade relativa', fmt(clima.umidade_relativa_pct, ' %'))}
+      ${statRow('Precipitação', fmt(clima.precipitacao_mm, ' mm'))}
+      ${statRow('Vento', fmt(clima.vento_kmh, ' km/h'))}
+      ${statRow('Pressão', fmt(clima.pressao_superficie_hpa || clima.pressao_hpa, ' hPa'))}
+    `
+  }));
+})();
+
+// Relevo
+(function(){
+  const d = DADOS.declividade_relevo || {};
+  const indisponivel = DADOS.erros && DADOS.erros.declividade_relevo;
+  priority.appendChild(card({
+    eyebrow: 'Relevo',
+    title: 'Declividade estimada',
+    unavailable: !!indisponivel,
+    body: indisponivel ? '<p class="sub">Fonte indisponível nesta coleta.</p>' : `
+      <div class="big-stat">${fmt(d.declividade_pct_estimada, ' %')}</div>
+      ${statRow('Classificação', fmt(d.classificacao_relevo))}
+      ${statRow('Elevação', fmt((DADOS.elevacao_e_fuso||{}).elevacao_m, ' m'))}
+    `,
+    note: d.observacao || null
+  }));
+})();
+
+// Bioma e vegetação
+(function(){
+  const b = DADOS.bioma_e_vegetacao || {};
+  const indisponivel = DADOS.erros && DADOS.erros.bioma_e_vegetacao;
+  priority.appendChild(card({
+    eyebrow: 'Bioma & vegetação',
+    title: 'Cobertura original',
+    unavailable: !!indisponivel || !b.bioma,
+    body: (indisponivel || !b.bioma) ? '<p class="sub">Requer GeoJSON de biomas configurado (ver --biomas-geojson).</p>' : `
+      ${statRow('Bioma', b.bioma)}
+      ${statRow('Vegetação original', fmt(b.vegetacao_original))}
+    `
+  }));
+})();
+
+// Uso do solo + risco de erosão (mesmo cartão, ambos "avançados")
+(function(){
+  const uso = DADOS.uso_do_solo || {};
+  const erosao = DADOS.risco_erosao || {};
+  priority.appendChild(card({
+    eyebrow: 'Solo · uso & risco',
+    title: 'Uso atual e erosão',
+    unavailable: !uso.uso_do_solo && !erosao.classe_risco_erosao,
+    body: `
+      ${statRow('Uso do solo', fmt(uso.uso_do_solo || uso.codigo_classe_mapbiomas))}
+      ${statRow('Risco de erosão', fmt(erosao.classe_risco_erosao))}
+    `,
+    note: (uso.observacao || erosao.observacao || null)
+  }));
+})();
+
+// Água e vegetação nativa próximas
+(function(){
+  const agua = (DADOS.distancia_agua || {}).corpo_dagua_mais_proximo;
+  const veg = (DADOS.distancia_vegetacao_nativa || {}).fragmento_vegetacao_mais_proximo;
+  priority.appendChild(card({
+    eyebrow: 'Proximidade ecológica',
+    title: 'Água & vegetação nativa',
+    unavailable: !agua && !veg,
+    body: `
+      ${statRow('Água mais próxima', agua ? `${agua.nome} · ${agua.distancia_km} km` : 'nenhuma no raio')}
+      ${statRow('Vegetação nativa', veg ? `${veg.nome} · ${veg.distancia_km} km` : 'nenhuma no raio')}
+    `
+  }));
+})();
+
+// Histórico de queimadas
+(function(){
+  const q = DADOS.historico_queimadas_local || {};
+  const indisponivel = DADOS.erros && DADOS.erros.historico_queimadas_local;
+  const anos = (q.anos_com_registro || []).map(a => `<span class="chip ember">${a}</span>`).join('');
+  priority.appendChild(card({
+    eyebrow: 'Histórico local (INPE)',
+    title: 'Recorrência de queimadas',
+    unavailable: !!indisponivel,
+    body: indisponivel ? '<p class="sub">Banco da Fase 1 não configurado (ver --banco-queimadas).</p>' : `
+      <div class="big-stat">${fmt(q.total_focos_no_raio)}</div>
+      <p class="sub">focos registrados em raio de ${fmt(q.raio_consultado_km, ' km')}</p>
+      <div style="margin-top:8px;">${anos || '<span class="sub">nenhum ano com registro</span>'}</div>
+    `
+  }));
+})();
+
+// ---------- Secondary modules ----------
+const secondary = document.getElementById('js-secondary-modules');
+
+// Qualidade do ar
+(function(){
+  const ar = DADOS.qualidade_do_ar || {};
+  const indisponivel = DADOS.erros && DADOS.erros.qualidade_do_ar;
+  secondary.appendChild(card({
+    eyebrow: 'Ar', title: 'Qualidade do ar',
+    unavailable: !!indisponivel,
+    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' : `
+      ${statRow('PM2.5', fmt(ar.pm2_5, ' µg/m³'))}
+      ${statRow('PM10', fmt(ar.pm10, ' µg/m³'))}
+      ${statRow('Ozônio', fmt(ar.ozonio, ' µg/m³'))}
+      ${statRow('Índice europeu (AQI)', fmt(ar.indice_qualidade_ar_europeu))}
+    `
+  }));
+})();
+
+// Normais climatológicas (gráfico)
+(function(){
+  const normais = DADOS.normais_climatologicas || {};
+  const indisponivel = DADOS.erros && DADOS.erros.normais_climatologicas;
+  const c = card({
+    eyebrow: 'NASA POWER · 1991–2020', title: 'Normais climatológicas',
+    unavailable: !!indisponivel,
+    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' : `<div class="chart-wrap"><canvas id="js-chart-normais"></canvas></div>`
+  });
+  secondary.appendChild(c);
+  if (!indisponivel && normais.por_mes){
+    const meses = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    const temp = meses.map(m => (normais.por_mes[m]||{}).temp_media_c);
+    const precip = meses.map(m => (normais.por_mes[m]||{}).precipitacao_mm_dia);
+    new Chart(document.getElementById('js-chart-normais'), {
+      data: {
+        labels: meses,
+        datasets: [
+          {type:'bar', label:'Precipitação (mm/dia)', data: precip, backgroundColor:'rgba(95,147,170,0.55)', yAxisID:'y1', borderRadius:3},
+          {type:'line', label:'Temp. média (°C)', data: temp, borderColor:'#d7ac5c', backgroundColor:'#d7ac5c', yAxisID:'y2', tension:.35, pointRadius:2}
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:'#8ea298', font:{size:9}}}},
+        scales:{
+          x:{ticks:{color:'#8ea298', font:{size:9}}, grid:{display:false}},
+          y1:{position:'left', ticks:{color:'#8ea298', font:{size:9}}, grid:{color:'#2c3833'}},
+          y2:{position:'right', ticks:{color:'#8ea298', font:{size:9}}, grid:{display:false}}
+        }
+      }
+    });
+  }
+})();
+
+// Áreas protegidas
+(function(){
+  const areas = DADOS.areas_protegidas_proximas || [];
+  const indisponivel = DADOS.erros && DADOS.erros.areas_protegidas_proximas;
+  const itens = areas.slice(0,6).map(a =>
+    `<li><span>${a.nome}</span><span class="v" style="font-family:'IBM Plex Mono',monospace;">${fmt(a.distancia_aproximada_km,' km')}</span></li>`
+  ).join('');
+  secondary.appendChild(card({
+    eyebrow: 'OSM / CNUC', title: 'Áreas protegidas próximas',
+    unavailable: !!indisponivel || areas.length === 0,
+    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' :
+      (areas.length ? `<ul class="protected-list">${itens}</ul>` : '<p class="sub">Nenhuma encontrada no raio consultado.</p>')
+  }));
+})();
+
+// Solo
+(function(){
+  const solo = DADOS.solo || {};
+  const indisponivel = DADOS.erros && DADOS.erros.solo;
+  const linhas = Object.entries(solo).map(([prop, info]) => `
+    <tr><td>${prop}</td><td>${fmt((info.valores||{})['0-5cm'])}</td><td>${fmt((info.valores||{})['5-15cm'])}</td><td style="color:#8ea298;">${info.unidade||''}</td></tr>
+  `).join('');
+  secondary.appendChild(card({
+    eyebrow: 'SoilGrids / ISRIC', title: 'Solo (propriedades físico-químicas)',
+    unavailable: !!indisponivel,
+    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' : `
+      <table class="soil-table">
+        <tr><th>Propriedade</th><th>0–5cm</th><th>5–15cm</th><th>Unidade</th></tr>
+        ${linhas}
+      </table>
+    `
+  }));
+})();
+
+// ---------- Diagnostics ----------
+const erros = DADOS.erros || {};
+if (Object.keys(erros).length){
+  document.getElementById('js-diagnostics').hidden = false;
+  const lista = document.getElementById('js-diagnostics-list');
+  Object.entries(erros).forEach(([fonte, msg]) => {
+    lista.appendChild(el('li', null, `<code>${fonte}</code> — ${msg}`));
+  });
+}
+</script>
+</body>
+</html>

@@ -1,22 +1,55 @@
-import pandas as pd
-from pathlib import Path
-import geopandas as gpd
-import geobr
-from shapely.geometry import Point
-import folium
+#!/usr/bin/env python3
+"""
+Runs the complete ReviveTech pipeline in sequence:
+  1. unify_hotspots.py       -> downloads (TS scraper) and merges into unified_file.csv
+  2. generate_spreadsheet.py -> merges nearby hotspots into consolidated real wildfires
+  3. select_hotspots.py      -> interactive search + dashboard via rtdash.py
 
-# Usamos o Pathlib aqui para gerenciar os caminhos das pastas.
-pathDiario = Path("focos_diarios")      # Pasta onde salvamos o histórico diário do INPE
-pathMinuto = Path("focos_por_minuto")    # Pasta com as atualizações de tempo real (10 min)
+Usage:
+    python main.py                  # runs everything, last 30 days
+    python main.py --days 60        # runs everything, last 60 days
+    python main.py --skip-download  # skips steps 1 and 2, goes straight to search
+"""
+import argparse
+import sys
 
-# Carregamos a base diária.
-df_diario = pd.read_csv(pathDiario / "focos_diario_br_20260701.csv")
+import select_hotspots
+import select_hotspots
+import unify_hotspots
 
-# Faxina nos dados: jogamos fora colunas redundantes para deixar o DataFrame leve.
-# Como a nossa base já é exclusiva do Brasil, as colunas 'pais' e 'pais_id' só
-# ocupam memória à toa. Também dropamos o 'satelite' daqui.
-df_diario = df_diario.drop("satelite", axis=1)
-df_diario = df_diario.drop("pais_id", axis=1)
-df_diario = df_diario.drop("pais", axis=1)
 
-print(df_diario)
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--days", type=int, default=30, help="Number of days of hotspots to download (default: 30)")
+    parser.add_argument(
+        "--skip-download",
+        action="store_true",
+        help="Skips downloading/merging/consolidation and goes straight to search (consolidated_fires_spreadsheet.csv must already exist)",
+    )
+    args = parser.parse_args()
+
+    if not args.skip_download:
+        print("=" * 70)
+        print(" STEP 1/3 — Downloading and merging hotspots")
+        print("=" * 70)
+        unify_hotspots.main(args.days)
+
+        print("\n" + "=" * 70)
+        print(" STEP 2/3 — Consolidating hotspots into wildfires")
+        print("=" * 70)
+        select_hotspots.main()
+    else:
+        print("Skipping download/consolidation (--skip-download) — using existing spreadsheet.")
+
+    print("\n" + "=" * 70)
+    print(" STEP 3/3 — Interactive search")
+    print("=" * 70)
+    select_hotspots.main()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.")
+        sys.exit(0)
