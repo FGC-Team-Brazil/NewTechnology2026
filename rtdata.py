@@ -1,58 +1,59 @@
 #!/usr/bin/env python3
 """
-Revivetech — Coletor de Dados Regionais (v2 — foco em decisão biológica)
+Revivetech — Regional Data Collector (v2 — focused on biological decision-making)
 =========================================================================
 
-Recebe uma latitude e longitude (e, opcionalmente, uma data/hora) e retorna
-a maior quantidade possível de dados sobre a região, consultando múltiplas
-fontes públicas em paralelo.
+Receives a latitude and longitude (and, optionally, a date/time) and returns
+as much data as possible about the region, querying multiple public sources
+in parallel.
 
-FONTES 100% ONLINE (sem chave):
-  - Nominatim (OpenStreetMap)  -> localização administrativa
-  - Open-Meteo                 -> elevação, fuso horário, clima atual e
-                                   previsão de 7 dias
-  - Open-Meteo Archive         -> clima HISTÓRICO (quando --data-hora é
-                                   informado, no lugar do clima atual)
-  - Open-Meteo Air Quality     -> qualidade do ar
-  - NASA POWER                 -> normais climatológicas mensais (1991-2020)
-  - SoilGrids (ISRIC)          -> propriedades físico-químicas do solo
-  - Overpass API (OSM)         -> áreas protegidas, corpos d'água e
-                                   fragmentos de vegetação nativa próximos
+FULLY ONLINE SOURCES (no API key required):
+  - Nominatim (OpenStreetMap)  -> administrative location
+  - Open-Meteo                 -> elevation, timezone, current weather and
+                                   7-day forecast
+  - Open-Meteo Archive         -> HISTORICAL weather (when --datetime is
+                                   provided, instead of current weather)
+  - Open-Meteo Air Quality     -> air quality
+  - NASA POWER                 -> monthly climate normals (1991-2020)
+  - SoilGrids (ISRIC)          -> physical-chemical soil properties
+  - Overpass API (OSM)         -> protected areas, water bodies and
+                                   native vegetation fragments nearby
 
-FONTES QUE EXIGEM CONFIGURAÇÃO LOCAL (não têm API pública gratuita simples,
-mas são as que mais pesam na decisão de espécie/estratégia de restauração):
-  - Bioma e vegetação original  -> GeoJSON do IBGE, baixado 1x
-  - Risco de erosão do solo     -> GeoJSON/shapefile da Embrapa GeoInfo, 1x
-  - Uso do solo atual           -> MapBiomas via Google Earth Engine
-                                   (exige cadastro gratuito + autenticação)
-  - Histórico de queimadas      -> cruzamento com o banco próprio do
-                                   Revivetech (Fase 1 / dados do INPE)
+SOURCES THAT REQUIRE LOCAL CONFIGURATION (no simple free public API,
+but the ones that matter most for the species/restoration-strategy
+decision):
+  - Biome and vegetation         -> IBGE GeoJSON, downloaded once
+  - Soil erosion risk            -> Embrapa GeoInfo GeoJSON/shapefile, once
+  - Current land use             -> MapBiomas via Google Earth Engine
+                                     (requires free registration + authentication)
+  - Wildfire history             -> cross-referenced with Revivetech's own
+                                     database (Phase 1 / INPE data)
 
-Este é um MVP: o foco é quantidade e qualidade de dados retornados, não
-performance ou robustez de produção. Todas as chamadas são feitas com
-tratamento de erro isolado — se uma fonte falhar (ou não estiver
-configurada), as demais continuam normalmente e o problema é reportado no
-bloco "erros" do resultado final.
+This is an MVP: the focus is on the quantity and quality of the data
+returned, not on performance or production robustness. All calls are made
+with isolated error handling — if one source fails (or is not configured),
+the others continue normally and the problem is reported in the "errors"
+block of the final result.
 
-Uso:
-    # dados atuais
+Usage:
+    # current data
     python revivetech_data_collector.py -23.5505 -46.6333
 
-    # dados históricos (ex: clima de um dia de queimada específico)
-    python revivetech_data_collector.py -23.5505 -46.6333 --data-hora 2026-01-15T14:30
+    # historical data (e.g. weather for a specific wildfire day)
+    python revivetech_data_collector.py -23.5505 -46.6333 --datetime 2026-01-15T14:30
 
-    # apontando para os arquivos locais (bioma, erosão, banco de queimadas)
+    # pointing to local files (biome, erosion, wildfire database)
     python revivetech_data_collector.py -15.7801 -47.9292 \
-        --biomas-geojson dados_locais/biomas_ibge.geojson \
-        --erosao-geojson dados_locais/risco_erosao_embrapa.geojson \
-        --banco-queimadas dados_locais/queimadas_inpe.db
+        --biomes-geojson local_data/ibge_biomes.geojson \
+        --erosion-geojson local_data/embrapa_erosion_risk.geojson \
+        --wildfire-db local_data/inpe_wildfires.db
 
-Dependências extras (opcionais, só para bioma/erosão):
+Extra dependencies (optional, only needed for biome/erosion):
     pip install geopandas shapely
 
-Saída:
-    - Resumo legível impresso no console
-    - Arquivo JSON completo salvo em ./saidas/
+Output:
+    - Readable summary printed to the console
+    - Full JSON file saved to ./outputs/
 """
 
 from __future__ import annotations
@@ -70,10 +71,10 @@ from typing import Any, Callable, Optional
 
 import requests
 
-from rtdash import salvar_dashboard
+from rtdash import save_dashboard
 
 # --------------------------------------------------------------------------
-# Configuração geral
+# General configuration
 # --------------------------------------------------------------------------
 
 logging.basicConfig(
@@ -83,77 +84,77 @@ logging.basicConfig(
 )
 log = logging.getLogger("revivetech")
 
-HTTP_TIMEOUT = 20  # segundos
-USER_AGENT = "Revivetech-DataCollector/2.0 (uso educacional/pesquisa ambiental)"
+HTTP_TIMEOUT = 20  # seconds
+USER_AGENT = "Revivetech-DataCollector/2.0 (educational/environmental research use)"
 
-# Bounding box aproximado do Brasil, usado só como sinalização informativa
-BRASIL_BBOX = {"lat_min": -33.9, "lat_max": 5.3, "lon_min": -74.0, "lon_max": -28.8}
+# Approximate bounding box of Brazil, used only as an informational flag
+BRAZIL_BBOX = {"lat_min": -33.9, "lat_max": 5.3, "lon_min": -74.0, "lon_max": -28.8}
 
-# Fatores de conversão dos valores "mapeados" do SoilGrids v2.0 para unidades
-# convencionais (documentação ISRIC).
-SOILGRIDS_CONVERSAO = {
-    "bdod": (100, "kg/dm³ (densidade aparente)"),
-    "cec": (10, "cmol(c)/kg (CTC)"),
-    "cfvo": (10, "% (fragmentos grosseiros)"),
-    "clay": (10, "% (argila)"),
-    "nitrogen": (100, "g/kg (nitrogênio total)"),
-    "phh2o": (10, "pH em água"),
-    "sand": (10, "% (areia)"),
-    "silt": (10, "% (silte)"),
-    "soc": (10, "g/kg (carbono orgânico do solo)"),
-    "ocd": (10, "kg/m³ (densidade de carbono orgânico)"),
+# Conversion factors from SoilGrids v2.0 "mapped" values to conventional
+# units (ISRIC documentation).
+SOILGRIDS_CONVERSION = {
+    "bdod": (100, "kg/dm³ (bulk density)"),
+    "cec": (10, "cmol(c)/kg (CEC)"),
+    "cfvo": (10, "% (coarse fragments)"),
+    "clay": (10, "% (clay)"),
+    "nitrogen": (100, "g/kg (total nitrogen)"),
+    "phh2o": (10, "pH in water"),
+    "sand": (10, "% (sand)"),
+    "silt": (10, "% (silt)"),
+    "soc": (10, "g/kg (soil organic carbon)"),
+    "ocd": (10, "kg/m³ (organic carbon density)"),
 }
 
 # --------------------------------------------------------------------------
-# Configuração das fontes LOCAIS (download único ou banco próprio) — não são
-# APIs online. Podem ser sobrescritas por variável de ambiente ou por
-# argumento de linha de comando.
+# Configuration of LOCAL sources (one-time download or in-house database) —
+# these are not online APIs. Can be overridden via environment variable or
+# command-line argument.
 # --------------------------------------------------------------------------
 
-# GeoJSON de biomas do Brasil (IBGE), em EPSG:4326.
-# Baixe uma vez em:
+# GeoJSON of Brazilian biomes (IBGE), in EPSG:4326.
+# Download it once at:
 #   https://www.ibge.gov.br/geociencias/informacoes-ambientais/vegetacao/15842-biomas.html
-# (exporte/reprojete para GeoJSON se vier como shapefile).
-CAMINHO_BIOMAS_GEOJSON = os.environ.get(
-    "REVIVETECH_BIOMAS_GEOJSON", "dados_locais/biomas_ibge.geojson"
+# (export/reproject to GeoJSON if it comes as a shapefile).
+BIOMES_GEOJSON_PATH = os.environ.get(
+    "REVIVETECH_BIOMES_GEOJSON", "local_data/ibge_biomes.geojson"
 )
 
-# GeoJSON/shapefile de risco de erosão do solo (Embrapa GeoInfo):
+# GeoJSON/shapefile of soil erosion risk (Embrapa GeoInfo):
 #   https://www.geoportal.cnptia.embrapa.br/
-CAMINHO_EROSAO_GEOJSON = os.environ.get(
-    "REVIVETECH_EROSAO_GEOJSON", "dados_locais/risco_erosao_embrapa.geojson"
+EROSION_GEOJSON_PATH = os.environ.get(
+    "REVIVETECH_EROSION_GEOJSON", "local_data/embrapa_erosion_risk.geojson"
 )
 
-# Banco (SQLite) alimentado pela Fase 1 do projeto (download automático do
-# INPE). Assume-se uma tabela com colunas de latitude, longitude e data/hora
-# — ajuste os nomes via parâmetros da função se o esquema real for diferente,
-# ou troque a conexão sqlite3 por psycopg2/mysql-connector se o banco da
-# Fase 1 for Postgres/MySQL.
-CAMINHO_BANCO_QUEIMADAS = os.environ.get(
-    "REVIVETECH_BANCO_QUEIMADAS", "dados_locais/queimadas_inpe.db"
+# Database (SQLite) fed by Phase 1 of the project (automatic INPE download).
+# Assumes a table with latitude, longitude and datetime columns — adjust the
+# names via the function parameters if the actual Phase 1 schema differs, or
+# swap the sqlite3 connection for psycopg2/mysql-connector if the Phase 1
+# database is Postgres/MySQL.
+WILDFIRE_DB_PATH = os.environ.get(
+    "REVIVETECH_WILDFIRE_DB", "local_data/inpe_wildfires.db"
 )
 
-# MapBiomas (uso e cobertura do solo) via Google Earth Engine. Exige cadastro
-# gratuito em https://code.earthengine.google.com/ e rodar
-# `earthengine authenticate` uma vez na máquina. Desativado por padrão.
-MAPBIOMAS_HABILITADO = os.environ.get(
-    "REVIVETECH_MAPBIOMAS_HABILITADO", "false"
+# MapBiomas (land use and cover) via Google Earth Engine. Requires free
+# registration at https://code.earthengine.google.com/ and running
+# `earthengine authenticate` once on the machine. Disabled by default.
+MAPBIOMAS_ENABLED = os.environ.get(
+    "REVIVETECH_MAPBIOMAS_ENABLED", "false"
 ).lower() == "true"
 
-# geopandas/shapely são opcionais — só necessários para bioma e erosão.
+# geopandas/shapely are optional — only needed for biome and erosion.
 try:
     import geopandas as gpd
     from shapely.geometry import Point
 
-    _GEOPANDAS_DISPONIVEL = True
+    _GEOPANDAS_AVAILABLE = True
 except ImportError:
-    _GEOPANDAS_DISPONIVEL = False
+    _GEOPANDAS_AVAILABLE = False
 
-_CACHE_CAMADAS: dict[str, Any] = {}
+_LAYER_CACHE: dict[str, Any] = {}
 
 
 def _get_json(url: str, params: Optional[dict] = None, headers: Optional[dict] = None) -> dict:
-    """Faz um GET e retorna o JSON, lançando exceção clara em caso de erro."""
+    """Performs a GET request and returns the JSON, raising a clear exception on error."""
     headers = headers or {}
     headers.setdefault("User-Agent", USER_AGENT)
     resp = requests.get(url, params=params, headers=headers, timeout=HTTP_TIMEOUT)
@@ -162,7 +163,7 @@ def _get_json(url: str, params: Optional[dict] = None, headers: Optional[dict] =
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Distância aproximada em km entre dois pontos (fórmula de Haversine)."""
+    """Approximate distance in km between two points (Haversine formula)."""
     r = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
@@ -171,78 +172,78 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def _carregar_camada(caminho: str):
+def _load_layer(path: str):
     """
-    Carrega (e mantém em cache) uma camada geográfica local (GeoJSON ou
-    shapefile) usando geopandas, reprojetando para EPSG:4326 se necessário.
+    Loads (and caches) a local geographic layer (GeoJSON or shapefile) using
+    geopandas, reprojecting to EPSG:4326 if necessary.
     """
-    if not _GEOPANDAS_DISPONIVEL:
+    if not _GEOPANDAS_AVAILABLE:
         raise RuntimeError(
-            "geopandas/shapely não instalados. Rode: pip install geopandas shapely"
+            "geopandas/shapely not installed. Run: pip install geopandas shapely"
         )
-    if caminho in _CACHE_CAMADAS:
-        return _CACHE_CAMADAS[caminho]
-    if not os.path.exists(caminho):
+    if path in _LAYER_CACHE:
+        return _LAYER_CACHE[path]
+    if not os.path.exists(path):
         raise FileNotFoundError(
-            f"Arquivo não encontrado: {caminho} "
-            "(baixe a camada uma vez e aponte o caminho correto — ver docstring do módulo)"
+            f"File not found: {path} "
+            "(download the layer once and point to the correct path — see module docstring)"
         )
-    camada = gpd.read_file(caminho)
-    if camada.crs is not None and camada.crs.to_epsg() != 4326:
-        camada = camada.to_crs(epsg=4326)
-    _CACHE_CAMADAS[caminho] = camada
-    return camada
+    layer = gpd.read_file(path)
+    if layer.crs is not None and layer.crs.to_epsg() != 4326:
+        layer = layer.to_crs(epsg=4326)
+    _LAYER_CACHE[path] = layer
+    return layer
 
 
 # --------------------------------------------------------------------------
-# Coletores individuais — cada um é independente e nunca derruba os demais
+# Individual collectors — each one is independent and never brings down the others
 # --------------------------------------------------------------------------
 
-def coletar_localizacao(lat: float, lon: float) -> dict:
-    """Geocodificação reversa via Nominatim (OpenStreetMap)."""
-    dados = _get_json(
+def collect_location(lat: float, lon: float) -> dict:
+    """Reverse geocoding via Nominatim (OpenStreetMap)."""
+    data = _get_json(
         "https://nominatim.openstreetmap.org/reverse",
         params={"format": "jsonv2", "lat": lat, "lon": lon, "addressdetails": 1, "zoom": 14},
     )
-    endereco = dados.get("address", {})
+    address = data.get("address", {})
     return {
-        "nome_exibicao": dados.get("display_name"),
-        "pais": endereco.get("country"),
-        "estado": endereco.get("state"),
-        "municipio": (
-            endereco.get("city")
-            or endereco.get("town")
-            or endereco.get("municipality")
-            or endereco.get("village")
+        "display_name": data.get("display_name"),
+        "country": address.get("country"),
+        "state": address.get("state"),
+        "municipality": (
+            address.get("city")
+            or address.get("town")
+            or address.get("municipality")
+            or address.get("village")
         ),
-        "bairro_distrito": endereco.get("suburb") or endereco.get("district"),
-        "cep_aproximado": endereco.get("postcode"),
-        "osm_tipo": dados.get("type"),
-        "osm_categoria": dados.get("category"),
-        "osm_id": dados.get("osm_id"),
+        "neighborhood_district": address.get("suburb") or address.get("district"),
+        "approximate_postal_code": address.get("postcode"),
+        "osm_type": data.get("type"),
+        "osm_category": data.get("category"),
+        "osm_id": data.get("osm_id"),
     }
 
 
-def coletar_elevacao_e_fuso(lat: float, lon: float) -> dict:
-    """Elevação (m) e fuso horário via Open-Meteo."""
-    elevacao = _get_json(
+def collect_elevation_and_timezone(lat: float, lon: float) -> dict:
+    """Elevation (m) and timezone via Open-Meteo."""
+    elevation = _get_json(
         "https://api.open-meteo.com/v1/elevation",
         params={"latitude": lat, "longitude": lon},
     )
-    fuso = _get_json(
+    tz = _get_json(
         "https://api.open-meteo.com/v1/forecast",
         params={"latitude": lat, "longitude": lon, "current": "temperature_2m", "timezone": "auto"},
     )
     return {
-        "elevacao_m": (elevacao.get("elevation") or [None])[0],
-        "fuso_horario": fuso.get("timezone"),
-        "utc_offset_segundos": fuso.get("utc_offset_seconds"),
+        "elevation_m": (elevation.get("elevation") or [None])[0],
+        "timezone": tz.get("timezone"),
+        "utc_offset_seconds": tz.get("utc_offset_seconds"),
     }
 
 
-def coletar_clima_atual_e_previsao(lat: float, lon: float) -> dict:
-    """Clima atual + previsão de 7 dias via Open-Meteo."""
-    dados = _get_json(
+def collect_current_weather_and_forecast(lat: float, lon: float) -> dict:
+    """Current weather + 7-day forecast via Open-Meteo."""
+    data = _get_json(
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat,
@@ -260,53 +261,53 @@ def coletar_clima_atual_e_previsao(lat: float, lon: float) -> dict:
             "timezone": "auto",
         },
     )
-    atual = dados.get("current", {})
-    diario = dados.get("daily", {})
+    current = data.get("current", {})
+    daily = data.get("daily", {})
 
-    previsao_7dias = []
-    datas = diario.get("time", [])
-    for i, data_str in enumerate(datas):
-        previsao_7dias.append({
-            "data": data_str,
-            "temp_max_c": diario.get("temperature_2m_max", [None] * len(datas))[i],
-            "temp_min_c": diario.get("temperature_2m_min", [None] * len(datas))[i],
-            "precipitacao_total_mm": diario.get("precipitation_sum", [None] * len(datas))[i],
-            "prob_precipitacao_pct": diario.get("precipitation_probability_max", [None] * len(datas))[i],
-            "vento_max_kmh": diario.get("wind_speed_10m_max", [None] * len(datas))[i],
-            "indice_uv_max": diario.get("uv_index_max", [None] * len(datas))[i],
+    forecast_7_days = []
+    dates = daily.get("time", [])
+    for i, date_str in enumerate(dates):
+        forecast_7_days.append({
+            "date": date_str,
+            "temp_max_c": daily.get("temperature_2m_max", [None] * len(dates))[i],
+            "temp_min_c": daily.get("temperature_2m_min", [None] * len(dates))[i],
+            "total_precipitation_mm": daily.get("precipitation_sum", [None] * len(dates))[i],
+            "precipitation_probability_pct": daily.get("precipitation_probability_max", [None] * len(dates))[i],
+            "max_wind_kmh": daily.get("wind_speed_10m_max", [None] * len(dates))[i],
+            "max_uv_index": daily.get("uv_index_max", [None] * len(dates))[i],
         })
 
     return {
-        "condicoes_atuais": {
-            "temperatura_c": atual.get("temperature_2m"),
-            "umidade_relativa_pct": atual.get("relative_humidity_2m"),
-            "sensacao_termica_c": atual.get("apparent_temperature"),
-            "precipitacao_mm": atual.get("precipitation"),
-            "cobertura_de_nuvens_pct": atual.get("cloud_cover"),
-            "pressao_superficie_hpa": atual.get("surface_pressure"),
-            "vento_kmh": atual.get("wind_speed_10m"),
-            "direcao_vento_graus": atual.get("wind_direction_10m"),
-            "codigo_tempo_wmo": atual.get("weather_code"),
+        "current_conditions": {
+            "temperature_c": current.get("temperature_2m"),
+            "relative_humidity_pct": current.get("relative_humidity_2m"),
+            "apparent_temperature_c": current.get("apparent_temperature"),
+            "precipitation_mm": current.get("precipitation"),
+            "cloud_cover_pct": current.get("cloud_cover"),
+            "surface_pressure_hpa": current.get("surface_pressure"),
+            "wind_kmh": current.get("wind_speed_10m"),
+            "wind_direction_deg": current.get("wind_direction_10m"),
+            "wmo_weather_code": current.get("weather_code"),
         },
-        "previsao_7_dias": previsao_7dias,
+        "forecast_7_days": forecast_7_days,
     }
 
 
-def coletar_clima_historico(lat: float, lon: float, data_hora: datetime) -> dict:
+def collect_historical_weather(lat: float, lon: float, dt: datetime) -> dict:
     """
-    Condições climáticas HISTÓRICAS via Open-Meteo Archive API, para a
-    data/hora informada — usado no lugar do clima atual quando o usuário
-    passa --data-hora (ex: reconstituir o cenário meteorológico do dia de
-    uma queimada específica, em vez do clima de agora).
+    HISTORICAL weather conditions via the Open-Meteo Archive API, for the
+    given date/time — used instead of current weather when the user passes
+    --datetime (e.g. to reconstruct the meteorological scenario of a
+    specific wildfire day, instead of the current weather).
     """
-    data_str = data_hora.strftime("%Y-%m-%d")
-    dados = _get_json(
+    date_str = dt.strftime("%Y-%m-%d")
+    data = _get_json(
         "https://archive-api.open-meteo.com/v1/archive",
         params={
             "latitude": lat,
             "longitude": lon,
-            "start_date": data_str,
-            "end_date": data_str,
+            "start_date": date_str,
+            "end_date": date_str,
             "hourly": ",".join([
                 "temperature_2m", "relative_humidity_2m", "precipitation",
                 "wind_speed_10m", "wind_direction_10m", "surface_pressure",
@@ -315,37 +316,37 @@ def coletar_clima_historico(lat: float, lon: float, data_hora: datetime) -> dict
             "timezone": "auto",
         },
     )
-    horario = dados.get("hourly", {})
-    horas = horario.get("time", [])
-    if not horas:
-        return {"observacao": "sem dados históricos para esta data/local"}
+    hourly = data.get("hourly", {})
+    hours = hourly.get("time", [])
+    if not hours:
+        return {"note": "no historical data for this date/location"}
 
-    alvo = data_hora.strftime("%Y-%m-%dT%H:00")
-    if alvo in horas:
-        idx = horas.index(alvo)
+    target = dt.strftime("%Y-%m-%dT%H:00")
+    if target in hours:
+        idx = hours.index(target)
     else:
-        idx = min(range(len(horas)), key=lambda i: abs(i - data_hora.hour))
+        idx = min(range(len(hours)), key=lambda i: abs(i - dt.hour))
 
-    def _valor(campo: str):
-        lista = horario.get(campo, [])
-        return lista[idx] if idx < len(lista) else None
+    def _value(field: str):
+        values = hourly.get(field, [])
+        return values[idx] if idx < len(values) else None
 
     return {
-        "data_hora_solicitada": data_hora.isoformat(),
-        "data_hora_encontrada": horas[idx],
-        "temperatura_c": _valor("temperature_2m"),
-        "umidade_relativa_pct": _valor("relative_humidity_2m"),
-        "precipitacao_mm": _valor("precipitation"),
-        "vento_kmh": _valor("wind_speed_10m"),
-        "direcao_vento_graus": _valor("wind_direction_10m"),
-        "pressao_hpa": _valor("surface_pressure"),
-        "cobertura_nuvens_pct": _valor("cloud_cover"),
+        "requested_datetime": dt.isoformat(),
+        "found_datetime": hours[idx],
+        "temperature_c": _value("temperature_2m"),
+        "relative_humidity_pct": _value("relative_humidity_2m"),
+        "precipitation_mm": _value("precipitation"),
+        "wind_kmh": _value("wind_speed_10m"),
+        "wind_direction_deg": _value("wind_direction_10m"),
+        "pressure_hpa": _value("surface_pressure"),
+        "cloud_cover_pct": _value("cloud_cover"),
     }
 
 
-def coletar_qualidade_do_ar(lat: float, lon: float) -> dict:
-    """Qualidade do ar atual via Open-Meteo Air Quality API."""
-    dados = _get_json(
+def collect_air_quality(lat: float, lon: float) -> dict:
+    """Current air quality via the Open-Meteo Air Quality API."""
+    data = _get_json(
         "https://air-quality-api.open-meteo.com/v1/air-quality",
         params={
             "latitude": lat,
@@ -356,81 +357,81 @@ def coletar_qualidade_do_ar(lat: float, lon: float) -> dict:
             ]),
         },
     )
-    atual = dados.get("current", {})
+    current = data.get("current", {})
     return {
-        "pm10": atual.get("pm10"),
-        "pm2_5": atual.get("pm2_5"),
-        "monoxido_de_carbono": atual.get("carbon_monoxide"),
-        "dioxido_de_nitrogenio": atual.get("nitrogen_dioxide"),
-        "ozonio": atual.get("ozone"),
-        "indice_uv": atual.get("uv_index"),
-        "indice_qualidade_ar_europeu": atual.get("european_aqi"),
+        "pm10": current.get("pm10"),
+        "pm2_5": current.get("pm2_5"),
+        "carbon_monoxide": current.get("carbon_monoxide"),
+        "nitrogen_dioxide": current.get("nitrogen_dioxide"),
+        "ozone": current.get("ozone"),
+        "uv_index": current.get("uv_index"),
+        "european_air_quality_index": current.get("european_aqi"),
     }
 
 
-def coletar_normais_climatologicas(lat: float, lon: float) -> dict:
+def collect_climate_normals(lat: float, lon: float) -> dict:
     """
-    Normais climatológicas mensais (1991-2020) via NASA POWER — essenciais
-    para planejar época de plantio e espécies tolerantes ao regime hídrico
-    local, já que é uma média de longo prazo (não depende do dia da consulta).
+    Monthly climate normals (1991-2020) via NASA POWER — essential for
+    planning planting season and species tolerant to the local water
+    regime, since it's a long-term average (independent of query date).
     """
-    parametros = ",".join([
-        "T2M", "T2M_MAX", "T2M_MIN",       # temperatura média/máx/mín (°C)
-        "RH2M",                              # umidade relativa (%)
-        "PRECTOTCORR",                       # precipitação (mm/dia)
-        "ALLSKY_SFC_SW_DWN",                 # radiação solar (kWh/m²/dia)
-        "WS2M",                              # velocidade do vento a 2m (m/s)
+    parameters = ",".join([
+        "T2M", "T2M_MAX", "T2M_MIN",       # average/max/min temperature (°C)
+        "RH2M",                              # relative humidity (%)
+        "PRECTOTCORR",                       # precipitation (mm/day)
+        "ALLSKY_SFC_SW_DWN",                 # solar radiation (kWh/m²/day)
+        "WS2M",                              # wind speed at 2m (m/s)
     ])
-    dados = _get_json(
+    data = _get_json(
         "https://power.larc.nasa.gov/api/temporal/climatology/point",
         params={
-            "parameters": parametros,
+            "parameters": parameters,
             "community": "AG",
             "longitude": lon,
             "latitude": lat,
             "format": "JSON",
         },
     )
-    props = dados.get("properties", {}).get("parameter", {})
+    props = data.get("properties", {}).get("parameter", {})
 
-    meses = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-             "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+    months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+              "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
-    normais_por_mes = {}
-    for i, mes in enumerate(meses, start=1):
-        normais_por_mes[mes] = {
-            "temp_media_c": props.get("T2M", {}).get(mes),
-            "temp_max_c": props.get("T2M_MAX", {}).get(mes),
-            "temp_min_c": props.get("T2M_MIN", {}).get(mes),
-            "umidade_relativa_pct": props.get("RH2M", {}).get(mes),
-            "precipitacao_mm_dia": props.get("PRECTOTCORR", {}).get(mes),
-            "radiacao_solar_kwh_m2_dia": props.get("ALLSKY_SFC_SW_DWN", {}).get(mes),
-            "vento_m_s": props.get("WS2M", {}).get(mes),
+    normals_by_month = {}
+    for i, month in enumerate(months, start=1):
+        normals_by_month[month] = {
+            "avg_temp_c": props.get("T2M", {}).get(month),
+            "temp_max_c": props.get("T2M_MAX", {}).get(month),
+            "temp_min_c": props.get("T2M_MIN", {}).get(month),
+            "relative_humidity_pct": props.get("RH2M", {}).get(month),
+            "precipitation_mm_day": props.get("PRECTOTCORR", {}).get(month),
+            "solar_radiation_kwh_m2_day": props.get("ALLSKY_SFC_SW_DWN", {}).get(month),
+            "wind_m_s": props.get("WS2M", {}).get(month),
         }
 
-    anual = {
-        "temp_media_c": props.get("T2M", {}).get("ANN"),
-        "umidade_relativa_pct": props.get("RH2M", {}).get("ANN"),
-        "precipitacao_mm_dia": props.get("PRECTOTCORR", {}).get("ANN"),
-        "radiacao_solar_kwh_m2_dia": props.get("ALLSKY_SFC_SW_DWN", {}).get("ANN"),
-        "vento_m_s": props.get("WS2M", {}).get("ANN"),
+    annual = {
+        "avg_temp_c": props.get("T2M", {}).get("ANN"),
+        "relative_humidity_pct": props.get("RH2M", {}).get("ANN"),
+        "precipitation_mm_day": props.get("PRECTOTCORR", {}).get("ANN"),
+        "solar_radiation_kwh_m2_day": props.get("ALLSKY_SFC_SW_DWN", {}).get("ANN"),
+        "wind_m_s": props.get("WS2M", {}).get("ANN"),
     }
 
     return {
-        "fonte": "NASA POWER (série histórica 1991-2020)",
-        "media_anual": anual,
-        "por_mes": normais_por_mes,
+        "source": "NASA POWER (1991-2020 historical series)",
+        "annual_average": annual,
+        "by_month": normals_by_month,
     }
 
 
-def coletar_solo(lat: float, lon: float) -> dict:
+def collect_soil(lat: float, lon: float) -> dict:
     """
-    Propriedades físico-químicas do solo via SoilGrids (ISRIC), resolução
-    250m, nas camadas de 0-5cm e 5-15cm de profundidade.
+    Physical-chemical soil properties via SoilGrids (ISRIC), 250m
+    resolution, at the 0-5cm and 5-15cm depth layers.
     """
-    propriedades = list(SOILGRIDS_CONVERSAO.keys())
+    properties = list(SOILGRIDS_CONVERSION.keys())
     params = [("lon", lon), ("lat", lat)]
-    for p in propriedades:
+    for p in properties:
         params.append(("property", p))
     for d in ("0-5cm", "5-15cm"):
         params.append(("depth", d))
@@ -443,39 +444,39 @@ def coletar_solo(lat: float, lon: float) -> dict:
         timeout=HTTP_TIMEOUT,
     )
     resp.raise_for_status()
-    dados = resp.json()
+    data = resp.json()
 
-    resultado = {}
-    camadas = dados.get("properties", {}).get("layers", [])
-    for camada in camadas:
-        codigo = camada.get("name")
-        fator, unidade = SOILGRIDS_CONVERSAO.get(codigo, (1, ""))
-        valores_por_profundidade = {}
-        for prof in camada.get("depths", []):
-            rotulo = prof.get("label")
-            bruto = (prof.get("values") or {}).get("mean")
-            valor_convertido = round(bruto / fator, 2) if bruto is not None else None
-            valores_por_profundidade[rotulo] = valor_convertido
-        resultado[codigo] = {"unidade": unidade, "valores": valores_por_profundidade}
+    result = {}
+    layers = data.get("properties", {}).get("layers", [])
+    for layer in layers:
+        code = layer.get("name")
+        factor, unit = SOILGRIDS_CONVERSION.get(code, (1, ""))
+        values_by_depth = {}
+        for depth in layer.get("depths", []):
+            label = depth.get("label")
+            raw = (depth.get("values") or {}).get("mean")
+            converted_value = round(raw / factor, 2) if raw is not None else None
+            values_by_depth[label] = converted_value
+        result[code] = {"unit": unit, "values": values_by_depth}
 
-    return resultado
+    return result
 
 
-def coletar_areas_protegidas(lat: float, lon: float, raio_km: float = 15.0) -> list[dict]:
+def collect_protected_areas(lat: float, lon: float, radius_km: float = 15.0) -> list[dict]:
     """
-    Unidades de conservação / áreas protegidas próximas via Overpass API
-    (dados do OpenStreetMap, que incorpora boa parte da malha do CNUC/ICMBio).
+    Nearby protected areas / conservation units via the Overpass API
+    (OpenStreetMap data, which incorporates much of the CNUC/ICMBio mesh).
     """
-    raio_m = int(raio_km * 1000)
+    radius_m = int(radius_km * 1000)
     query = f"""
     [out:json][timeout:25];
     (
-      node(around:{raio_m},{lat},{lon})["boundary"="protected_area"];
-      way(around:{raio_m},{lat},{lon})["boundary"="protected_area"];
-      relation(around:{raio_m},{lat},{lon})["boundary"="protected_area"];
-      node(around:{raio_m},{lat},{lon})["leisure"="nature_reserve"];
-      way(around:{raio_m},{lat},{lon})["leisure"="nature_reserve"];
-      relation(around:{raio_m},{lat},{lon})["leisure"="nature_reserve"];
+      node(around:{radius_m},{lat},{lon})["boundary"="protected_area"];
+      way(around:{radius_m},{lat},{lon})["boundary"="protected_area"];
+      relation(around:{radius_m},{lat},{lon})["boundary"="protected_area"];
+      node(around:{radius_m},{lat},{lon})["leisure"="nature_reserve"];
+      way(around:{radius_m},{lat},{lon})["leisure"="nature_reserve"];
+      relation(around:{radius_m},{lat},{lon})["leisure"="nature_reserve"];
     );
     out center tags;
     """
@@ -486,48 +487,48 @@ def coletar_areas_protegidas(lat: float, lon: float, raio_km: float = 15.0) -> l
         timeout=HTTP_TIMEOUT,
     )
     resp.raise_for_status()
-    elementos = resp.json().get("elements", [])
+    elements = resp.json().get("elements", [])
 
     areas = []
-    for el in elementos:
+    for el in elements:
         tags = el.get("tags", {})
-        nome = tags.get("name") or tags.get("name:pt") or "(sem nome no OSM)"
+        name = tags.get("name") or tags.get("name:pt") or "(unnamed in OSM)"
         if "lat" in el and "lon" in el:
-            ponto_lat, ponto_lon = el["lat"], el["lon"]
+            point_lat, point_lon = el["lat"], el["lon"]
         else:
-            centro = el.get("center", {})
-            ponto_lat, ponto_lon = centro.get("lat"), centro.get("lon")
+            center = el.get("center", {})
+            point_lat, point_lon = center.get("lat"), center.get("lon")
 
-        distancia_km = None
-        if ponto_lat is not None and ponto_lon is not None:
-            distancia_km = round(_haversine_km(lat, lon, ponto_lat, ponto_lon), 2)
+        distance_km = None
+        if point_lat is not None and point_lon is not None:
+            distance_km = round(_haversine_km(lat, lon, point_lat, point_lon), 2)
 
         areas.append({
-            "nome": nome,
-            "categoria_protecao": tags.get("protect_class"),
-            "designacao": tags.get("designation") or tags.get("protection_title"),
-            "tipo_osm": tags.get("boundary") or tags.get("leisure"),
-            "distancia_aproximada_km": distancia_km,
+            "name": name,
+            "protection_category": tags.get("protect_class"),
+            "designation": tags.get("designation") or tags.get("protection_title"),
+            "osm_type": tags.get("boundary") or tags.get("leisure"),
+            "approximate_distance_km": distance_km,
         })
 
-    areas.sort(key=lambda a: (a["distancia_aproximada_km"] is None, a["distancia_aproximada_km"]))
+    areas.sort(key=lambda a: (a["approximate_distance_km"] is None, a["approximate_distance_km"]))
     return areas
 
 
-def _overpass_feature_mais_proxima(lat: float, lon: float, raio_km: float, filtros_overpass: str) -> Optional[dict]:
+def _overpass_nearest_feature(lat: float, lon: float, radius_km: float, overpass_filters: str) -> Optional[dict]:
     """
-    Busca no Overpass API (OSM) as feições que atendem aos filtros passados
-    dentro do raio, e retorna a mais próxima do ponto (nome, tipo, distância).
-    Generaliza a mesma técnica usada em `coletar_areas_protegidas`, para
-    reaproveitar em água e vegetação nativa.
+    Queries the Overpass API (OSM) for features matching the given filters
+    within the radius, and returns the one closest to the point (name,
+    type, distance). Generalizes the same technique used in
+    `collect_protected_areas`, to be reused for water and native vegetation.
     """
-    raio_m = int(raio_km * 1000)
-    filtros_preenchidos = (
-        filtros_overpass.replace("__RAIO__", str(raio_m))
+    radius_m = int(radius_km * 1000)
+    filled_filters = (
+        overpass_filters.replace("__RADIUS__", str(radius_m))
         .replace("__LAT__", str(lat))
         .replace("__LON__", str(lon))
     )
-    query = f"[out:json][timeout:25];({filtros_preenchidos});out center tags;"
+    query = f"[out:json][timeout:25];({filled_filters});out center tags;"
     resp = requests.post(
         "https://overpass-api.de/api/interpreter",
         data={"data": query},
@@ -535,495 +536,500 @@ def _overpass_feature_mais_proxima(lat: float, lon: float, raio_km: float, filtr
         timeout=HTTP_TIMEOUT,
     )
     resp.raise_for_status()
-    elementos = resp.json().get("elements", [])
+    elements = resp.json().get("elements", [])
 
-    melhor = None
-    for el in elementos:
+    best = None
+    for el in elements:
         tags = el.get("tags", {})
         if "lat" in el and "lon" in el:
             plat, plon = el["lat"], el["lon"]
         else:
-            centro = el.get("center", {})
-            plat, plon = centro.get("lat"), centro.get("lon")
+            center = el.get("center", {})
+            plat, plon = center.get("lat"), center.get("lon")
         if plat is None or plon is None:
             continue
         dist = _haversine_km(lat, lon, plat, plon)
-        candidato = {
-            "nome": tags.get("name") or tags.get("name:pt") or "(sem nome no OSM)",
-            "tipo": tags.get("natural") or tags.get("waterway") or tags.get("landuse"),
-            "distancia_km": round(dist, 3),
+        candidate = {
+            "name": tags.get("name") or tags.get("name:pt") or "(unnamed in OSM)",
+            "type": tags.get("natural") or tags.get("waterway") or tags.get("landuse"),
+            "distance_km": round(dist, 3),
         }
-        if melhor is None or candidato["distancia_km"] < melhor["distancia_km"]:
-            melhor = candidato
-    return melhor
+        if best is None or candidate["distance_km"] < best["distance_km"]:
+            best = candidate
+    return best
 
 
-def coletar_distancia_agua(lat: float, lon: float, raio_km: float = 10.0) -> dict:
+def collect_water_distance(lat: float, lon: float, radius_km: float = 10.0) -> dict:
     """
-    Distância até o corpo d'água (rio, córrego, lago, açude) mais próximo —
-    importante porque proximidade de água influencia espécie escolhida e
-    prioridade de restauração (Área de Preservação Permanente / APP).
+    Distance to the nearest body of water (river, stream, lake, pond) —
+    important because proximity to water influences species choice and
+    restoration priority (Permanent Preservation Area / APP).
     """
-    filtros = (
-        'node(around:__RAIO__,__LAT__,__LON__)["natural"="water"];'
-        'way(around:__RAIO__,__LAT__,__LON__)["natural"="water"];'
-        'way(around:__RAIO__,__LAT__,__LON__)["waterway"];'
+    filters = (
+        'node(around:__RADIUS__,__LAT__,__LON__)["natural"="water"];'
+        'way(around:__RADIUS__,__LAT__,__LON__)["natural"="water"];'
+        'way(around:__RADIUS__,__LAT__,__LON__)["waterway"];'
     )
-    resultado = _overpass_feature_mais_proxima(lat, lon, raio_km, filtros)
-    if resultado is None:
-        return {"corpo_dagua_mais_proximo": None, "observacao": f"nenhum encontrado em {raio_km} km"}
-    return {"corpo_dagua_mais_proximo": resultado}
+    result = _overpass_nearest_feature(lat, lon, radius_km, filters)
+    if result is None:
+        return {"nearest_water_body": None, "note": f"none found within {radius_km} km"}
+    return {"nearest_water_body": result}
 
 
-def coletar_distancia_vegetacao_nativa(lat: float, lon: float, raio_km: float = 10.0) -> dict:
+def collect_native_vegetation_distance(lat: float, lon: float, radius_km: float = 10.0) -> dict:
     """
-    Distância até o fragmento de vegetação nativa (mata/floresta) mais
-    próximo — restauração perto de mata remanescente tende a ter taxa de
-    sucesso maior (dispersão de sementes por fauna).
+    Distance to the nearest native vegetation (forest/woodland) fragment —
+    restoration near remaining native forest tends to have a higher success
+    rate (seed dispersal by fauna).
     """
-    filtros = (
-        'way(around:__RAIO__,__LAT__,__LON__)["natural"="wood"];'
-        'relation(around:__RAIO__,__LAT__,__LON__)["natural"="wood"];'
-        'way(around:__RAIO__,__LAT__,__LON__)["landuse"="forest"];'
+    filters = (
+        'way(around:__RADIUS__,__LAT__,__LON__)["natural"="wood"];'
+        'relation(around:__RADIUS__,__LAT__,__LON__)["natural"="wood"];'
+        'way(around:__RADIUS__,__LAT__,__LON__)["landuse"="forest"];'
     )
-    resultado = _overpass_feature_mais_proxima(lat, lon, raio_km, filtros)
-    if resultado is None:
-        return {"fragmento_vegetacao_mais_proximo": None, "observacao": f"nenhum encontrado em {raio_km} km"}
-    return {"fragmento_vegetacao_mais_proximo": resultado}
+    result = _overpass_nearest_feature(lat, lon, radius_km, filters)
+    if result is None:
+        return {"nearest_vegetation_fragment": None, "note": f"none found within {radius_km} km"}
+    return {"nearest_vegetation_fragment": result}
 
 
-def coletar_declividade(lat: float, lon: float, distancia_m: float = 100.0) -> dict:
+def collect_slope(lat: float, lon: float, distance_m: float = 100.0) -> dict:
     """
-    Estimativa de declividade (%) e classificação de relevo (faixas usadas
-    pela Embrapa no Sistema Brasileiro de Classificação de Solos), a partir
-    de um pequeno grid de elevação (centro + norte/sul/leste/oeste) via
-    Open-Meteo Elevation API. Não substitui um SRTM local em precisão, mas
-    já indica se o terreno é plano ou íngreme sem exigir nenhum download.
+    Estimate of slope (%) and terrain classification (bands used by
+    Embrapa in the Brazilian Soil Classification System), from a small
+    elevation grid (center + north/south/east/west) via the Open-Meteo
+    Elevation API. Does not replace a local SRTM in precision, but already
+    indicates whether the terrain is flat or steep without requiring any
+    download.
     """
-    delta_lat = distancia_m / 111_320.0
+    delta_lat = distance_m / 111_320.0
     cos_lat = math.cos(math.radians(lat))
-    delta_lon = distancia_m / (111_320.0 * cos_lat) if abs(cos_lat) > 1e-9 else 0.0
+    delta_lon = distance_m / (111_320.0 * cos_lat) if abs(cos_lat) > 1e-9 else 0.0
 
-    pontos = {
-        "centro": (lat, lon),
-        "norte": (lat + delta_lat, lon),
-        "sul": (lat - delta_lat, lon),
-        "leste": (lat, lon + delta_lon),
-        "oeste": (lat, lon - delta_lon),
+    points = {
+        "center": (lat, lon),
+        "north": (lat + delta_lat, lon),
+        "south": (lat - delta_lat, lon),
+        "east": (lat, lon + delta_lon),
+        "west": (lat, lon - delta_lon),
     }
 
-    lats_str = ",".join(str(p[0]) for p in pontos.values())
-    lons_str = ",".join(str(p[1]) for p in pontos.values())
+    lats_str = ",".join(str(p[0]) for p in points.values())
+    lons_str = ",".join(str(p[1]) for p in points.values())
 
-    dados = _get_json(
+    data = _get_json(
         "https://api.open-meteo.com/v1/elevation",
         params={"latitude": lats_str, "longitude": lons_str},
     )
-    elevacoes = dados.get("elevation", [])
-    if len(elevacoes) < 5:
-        raise RuntimeError("resposta inesperada da API de elevação (esperava 5 pontos)")
+    elevations = data.get("elevation", [])
+    if len(elevations) < 5:
+        raise RuntimeError("unexpected response from the elevation API (expected 5 points)")
 
-    nomes = list(pontos.keys())
-    elev = dict(zip(nomes, elevacoes))
+    names = list(points.keys())
+    elev = dict(zip(names, elevations))
 
-    diffs = [abs(elev["centro"] - elev[n]) for n in ("norte", "sul", "leste", "oeste")]
-    maior_diferenca = max(diffs)
-    declividade_pct = round((maior_diferenca / distancia_m) * 100, 2)
+    diffs = [abs(elev["center"] - elev[n]) for n in ("north", "south", "east", "west")]
+    max_difference = max(diffs)
+    slope_pct = round((max_difference / distance_m) * 100, 2)
 
-    if declividade_pct < 3:
-        classe = "plano"
-    elif declividade_pct < 8:
-        classe = "suave ondulado"
-    elif declividade_pct < 20:
-        classe = "ondulado"
-    elif declividade_pct < 45:
-        classe = "forte ondulado"
-    elif declividade_pct < 75:
-        classe = "montanhoso"
+    if slope_pct < 3:
+        classification = "flat"
+    elif slope_pct < 8:
+        classification = "gently rolling"
+    elif slope_pct < 20:
+        classification = "rolling"
+    elif slope_pct < 45:
+        classification = "strongly rolling"
+    elif slope_pct < 75:
+        classification = "mountainous"
     else:
-        classe = "escarpado"
+        classification = "steep"
 
     return {
-        "declividade_pct_estimada": declividade_pct,
-        "classificacao_relevo": classe,
-        "distancia_amostragem_m": distancia_m,
-        "elevacoes_pontos_m": elev,
-        "observacao": "estimativa por grid de 5 pontos (Open-Meteo); para precisão maior, use SRTM local",
+        "estimated_slope_pct": slope_pct,
+        "relief_classification": classification,
+        "sampling_distance_m": distance_m,
+        "point_elevations_m": elev,
+        "note": "estimate from a 5-point grid (Open-Meteo); for higher precision, use local SRTM",
     }
 
 
-def coletar_bioma_e_vegetacao(lat: float, lon: float, caminho_geojson: str = CAMINHO_BIOMAS_GEOJSON) -> dict:
+def collect_biome_and_vegetation(lat: float, lon: float, geojson_path: str = BIOMES_GEOJSON_PATH) -> dict:
     """
-    Identifica o bioma (e, se o GeoJSON tiver a coluna, a fitofisionomia/
-    vegetação original) via um GeoJSON do IBGE baixado uma única vez. É o
-    dado mais importante para decidir espécie/estratégia de restauração e
-    não existe API pública online simples para ele — por isso é local.
+    Identifies the biome (and, if the GeoJSON has the column, the original
+    vegetation/phytophysiognomy) via an IBGE GeoJSON downloaded once. This
+    is the most important piece of data for deciding species/restoration
+    strategy and there is no simple online public API for it — hence it's
+    local.
     """
-    camada = _carregar_camada(caminho_geojson)
-    ponto = Point(lon, lat)
-    correspondencias = camada[camada.contains(ponto)]
-    if correspondencias.empty:
+    layer = _load_layer(geojson_path)
+    point = Point(lon, lat)
+    matches = layer[layer.contains(point)]
+    if matches.empty:
         return {
-            "bioma": None,
-            "vegetacao_original": None,
-            "observacao": "ponto fora de todos os polígonos da camada carregada",
+            "biome": None,
+            "original_vegetation": None,
+            "note": "point outside all polygons in the loaded layer",
         }
 
-    linha = correspondencias.iloc[0]
+    row = matches.iloc[0]
 
-    def _campo(*nomes: str):
-        for n in nomes:
-            if n in linha and linha[n] not in (None, ""):
-                return linha[n]
+    def _field(*names: str):
+        for n in names:
+            if n in row and row[n] not in (None, ""):
+                return row[n]
         return None
 
     return {
-        "bioma": _campo("Bioma", "bioma", "BIOMA", "NOM_BIOMA"),
-        "vegetacao_original": _campo("Vegetacao", "vegetacao", "FITOFISIO", "LEGENDA"),
+        "biome": _field("Bioma", "bioma", "BIOMA", "NOM_BIOMA"),
+        "original_vegetation": _field("Vegetacao", "vegetacao", "FITOFISIO", "LEGENDA"),
     }
 
 
-def coletar_risco_erosao(lat: float, lon: float, caminho_geojson: str = CAMINHO_EROSAO_GEOJSON) -> dict:
+def collect_erosion_risk(lat: float, lon: float, geojson_path: str = EROSION_GEOJSON_PATH) -> dict:
     """
-    Classe de risco de erosão do solo, a partir do shapefile/GeoJSON da
-    Embrapa GeoInfo (download único — não há API pública). Ajuda a decidir
-    se a área precisa de técnicas de contenção antes do plantio.
+    Soil erosion risk class, from the Embrapa GeoInfo shapefile/GeoJSON
+    (one-time download — no public API available). Helps decide whether
+    the area needs containment techniques before planting.
     """
-    camada = _carregar_camada(caminho_geojson)
-    ponto = Point(lon, lat)
-    correspondencias = camada[camada.contains(ponto)]
-    if correspondencias.empty:
-        return {"classe_risco_erosao": None, "observacao": "ponto fora de todos os polígonos da camada carregada"}
+    layer = _load_layer(geojson_path)
+    point = Point(lon, lat)
+    matches = layer[layer.contains(point)]
+    if matches.empty:
+        return {"erosion_risk_class": None, "note": "point outside all polygons in the loaded layer"}
 
-    linha = correspondencias.iloc[0]
+    row = matches.iloc[0]
 
-    def _campo(*nomes: str):
-        for n in nomes:
-            if n in linha and linha[n] not in (None, ""):
-                return linha[n]
+    def _field(*names: str):
+        for n in names:
+            if n in row and row[n] not in (None, ""):
+                return row[n]
         return None
 
-    return {"classe_risco_erosao": _campo("Risco", "CLASSE", "risco_erosao", "LEGENDA")}
+    return {"erosion_risk_class": _field("Risco", "CLASSE", "risco_erosao", "LEGENDA")}
 
 
-def coletar_uso_do_solo_mapbiomas(lat: float, lon: float, ano: int = 2023) -> dict:
+def collect_land_use_mapbiomas(lat: float, lon: float, year: int = 2023) -> dict:
     """
-    Classe de uso e cobertura do solo atual (pasto, agricultura, solo
-    exposto, floresta etc.) via MapBiomas / Google Earth Engine. Define se
-    dá pra semear direto ou se precisa de preparo do solo antes.
+    Current land use and cover class (pasture, agriculture, bare soil,
+    forest, etc.) via MapBiomas / Google Earth Engine. Determines whether
+    direct seeding is possible or whether soil preparation is needed first.
 
-    Exige cadastro gratuito e autenticação prévia, por isso fica desativado
-    por padrão (MAPBIOMAS_HABILITADO=False). Para habilitar:
+    Requires free registration and prior authentication, so it is disabled
+    by default (MAPBIOMAS_ENABLED=False). To enable:
       1. pip install earthengine-api
-      2. earthengine authenticate   (uma vez, gera um token local)
-      3. export REVIVETECH_MAPBIOMAS_HABILITADO=true
+      2. earthengine authenticate   (once, generates a local token)
+      3. export REVIVETECH_MAPBIOMAS_ENABLED=true
 
-    Nota: o nome exato do asset/coleção do MapBiomas muda a cada nova
-    coleção lançada — confira o ID atual em https://mapbiomas.org/ antes de
-    usar em produção; o valor abaixo é só um ponto de partida.
+    Note: the exact name of the MapBiomas asset/collection changes with
+    every new collection release — check the current ID at
+    https://mapbiomas.org/ before using in production; the value below is
+    just a starting point.
     """
-    if not MAPBIOMAS_HABILITADO:
+    if not MAPBIOMAS_ENABLED:
         return {
-            "uso_do_solo": None,
-            "observacao": (
-                "MapBiomas desativado — requer cadastro no Earth Engine "
-                "(ver docstring da função coletar_uso_do_solo_mapbiomas)"
+            "land_use": None,
+            "note": (
+                "MapBiomas disabled — requires Earth Engine registration "
+                "(see the collect_land_use_mapbiomas function docstring)"
             ),
         }
     try:
         import ee
     except ImportError as exc:
-        raise RuntimeError("earthengine-api não instalado (pip install earthengine-api)") from exc
+        raise RuntimeError("earthengine-api not installed (pip install earthengine-api)") from exc
 
     ee.Initialize()
     asset_id = "projects/mapbiomas-public/assets/brazil/lulc/collection9/mapbiomas_collection90_integration_v1"
-    colecao = ee.Image(asset_id)
-    ponto = ee.Geometry.Point([lon, lat])
-    banda = f"classification_{ano}"
-    valor = colecao.select(banda).reduceRegion(
-        reducer=ee.Reducer.first(), geometry=ponto, scale=30
+    collection = ee.Image(asset_id)
+    point = ee.Geometry.Point([lon, lat])
+    band = f"classification_{year}"
+    value = collection.select(band).reduceRegion(
+        reducer=ee.Reducer.first(), geometry=point, scale=30
     ).getInfo()
 
     return {
-        "ano": ano,
-        "codigo_classe_mapbiomas": valor.get(banda),
-        "observacao": "consulte a legenda oficial do MapBiomas para traduzir o código em classe de uso do solo",
+        "year": year,
+        "mapbiomas_class_code": value.get(band),
+        "note": "consult the official MapBiomas legend to translate the code into a land use class",
     }
 
 
-def coletar_historico_queimadas_local(
+def collect_local_fire_history(
     lat: float,
     lon: float,
-    caminho_banco: str = CAMINHO_BANCO_QUEIMADAS,
-    raio_km: float = 5.0,
-    tabela: str = "focos",
-    coluna_lat: str = "latitude",
-    coluna_lon: str = "longitude",
-    coluna_data: str = "data_hora",
+    db_path: str = WILDFIRE_DB_PATH,
+    radius_km: float = 5.0,
+    table: str = "hotspots",
+    lat_column: str = "latitude",
+    lon_column: str = "longitude",
+    date_column: str = "date_time",
 ) -> dict:
     """
-    Cruza o ponto consultado com o banco de focos de queimada já coletado na
-    Fase 1 (INPE) — sem precisar de nenhuma API nova. Retorna quantos focos
-    (e em quantos anos distintos) já ocorreram perto do ponto, indicando
-    recorrência de incêndio na área (área que já queimou 3x em 5 anos pede
-    estratégia diferente de área queimando pela 1ª vez).
+    Cross-references the queried point with the wildfire hotspot database
+    already collected in Phase 1 (INPE) — without needing any new API.
+    Returns how many hotspots (and in how many distinct years) have already
+    occurred near the point, indicating fire recurrence in the area (an
+    area that has already burned 3x in 5 years calls for a different
+    strategy than an area burning for the first time).
 
-    Assume um banco SQLite simples com colunas de latitude/longitude/data.
-    Ajuste os nomes de tabela/coluna via parâmetros, ou troque a conexão
-    sqlite3 por outro driver se o banco da Fase 1 for Postgres/MySQL.
+    Assumes a simple SQLite database with latitude/longitude/date columns.
+    Adjust table/column names via the parameters, or swap the sqlite3
+    connection for another driver if the Phase 1 database is
+    Postgres/MySQL.
     """
-    if not os.path.exists(caminho_banco):
+    if not os.path.exists(db_path):
         raise FileNotFoundError(
-            f"Banco de queimadas não encontrado em: {caminho_banco} "
-            "(aponte para o banco gerado na Fase 1 do projeto)"
+            f"Wildfire database not found at: {db_path} "
+            "(point to the database generated in Phase 1 of the project)"
         )
 
-    # bounding box grosseiro pra filtrar antes de calcular a distância exata
-    delta = raio_km / 111.0
-    conn = sqlite3.connect(caminho_banco)
+    # rough bounding box to filter before computing the exact distance
+    delta = radius_km / 111.0
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
         cursor = conn.execute(
             f"""
-            SELECT {coluna_lat} AS lat, {coluna_lon} AS lon, {coluna_data} AS data_hora
-            FROM {tabela}
-            WHERE {coluna_lat} BETWEEN ? AND ?
-              AND {coluna_lon} BETWEEN ? AND ?
+            SELECT {lat_column} AS lat, {lon_column} AS lon, {date_column} AS date_time
+            FROM {table}
+            WHERE {lat_column} BETWEEN ? AND ?
+              AND {lon_column} BETWEEN ? AND ?
             """,
             (lat - delta, lat + delta, lon - delta, lon + delta),
         )
-        linhas = cursor.fetchall()
+        rows = cursor.fetchall()
     finally:
         conn.close()
 
-    focos_no_raio = []
-    for linha in linhas:
-        dist = _haversine_km(lat, lon, linha["lat"], linha["lon"])
-        if dist <= raio_km:
-            focos_no_raio.append({"data_hora": linha["data_hora"], "distancia_km": round(dist, 2)})
+    hotspots_in_radius = []
+    for row in rows:
+        dist = _haversine_km(lat, lon, row["lat"], row["lon"])
+        if dist <= radius_km:
+            hotspots_in_radius.append({"date_time": row["date_time"], "distance_km": round(dist, 2)})
 
-    datas_ordenadas = sorted(f["data_hora"] for f in focos_no_raio if f["data_hora"])
-    anos = sorted({d[:4] for d in datas_ordenadas if len(d) >= 4})
+    sorted_dates = sorted(f["date_time"] for f in hotspots_in_radius if f["date_time"])
+    years = sorted({d[:4] for d in sorted_dates if len(d) >= 4})
 
     return {
-        "raio_consultado_km": raio_km,
-        "total_focos_no_raio": len(focos_no_raio),
-        "anos_com_registro": anos,
-        "recorrencia_anos_distintos": len(anos),
-        "focos": focos_no_raio[:50],  # limita o payload no resumo
+        "queried_radius_km": radius_km,
+        "total_hotspots_in_radius": len(hotspots_in_radius),
+        "years_with_records": years,
+        "distinct_years_recurrence": len(years),
+        "hotspots": hotspots_in_radius[:50],  # limits the payload in the summary
     }
 
 
 # --------------------------------------------------------------------------
-# Orquestração
+# Orchestration
 # --------------------------------------------------------------------------
 
-def _dentro_do_brasil_aprox(lat: float, lon: float) -> bool:
+def _is_within_brazil_approx(lat: float, lon: float) -> bool:
     return (
-        BRASIL_BBOX["lat_min"] <= lat <= BRASIL_BBOX["lat_max"]
-        and BRASIL_BBOX["lon_min"] <= lon <= BRASIL_BBOX["lon_max"]
+        BRAZIL_BBOX["lat_min"] <= lat <= BRAZIL_BBOX["lat_max"]
+        and BRAZIL_BBOX["lon_min"] <= lon <= BRAZIL_BBOX["lon_max"]
     )
 
 
-def coletar_tudo(
+def collect_all(
     lat: float,
     lon: float,
-    raio_km: float = 15.0,
-    data_hora: Optional[datetime] = None,
-    raio_agua_km: float = 10.0,
-    raio_vegetacao_km: float = 10.0,
-    raio_queimadas_km: float = 5.0,
-    caminho_biomas: str = CAMINHO_BIOMAS_GEOJSON,
-    caminho_erosao: str = CAMINHO_EROSAO_GEOJSON,
-    caminho_banco_queimadas: str = CAMINHO_BANCO_QUEIMADAS,
+    radius_km: float = 15.0,
+    dt: Optional[datetime] = None,
+    water_radius_km: float = 10.0,
+    vegetation_radius_km: float = 10.0,
+    fire_radius_km: float = 5.0,
+    biomes_path: str = BIOMES_GEOJSON_PATH,
+    erosion_path: str = EROSION_GEOJSON_PATH,
+    wildfire_db_path: str = WILDFIRE_DB_PATH,
 ) -> dict:
     """
-    Executa todos os coletores em paralelo e agrega o resultado num único
-    dicionário. Cada fonte que falhar (ou não estiver configurada) é
-    registrada em "erros" sem interromper as demais.
+    Runs all collectors in parallel and aggregates the result into a single
+    dictionary. Any source that fails (or is not configured) is recorded
+    in "errors" without interrupting the others.
 
-    Se `data_hora` for informado, o clima é buscado na API de arquivo
-    histórico (Open-Meteo Archive) para aquela data/hora específica, em vez
-    do clima atual + previsão de 7 dias.
+    If `dt` is provided, weather is fetched from the historical archive API
+    (Open-Meteo Archive) for that specific date/time, instead of the
+    current weather + 7-day forecast.
     """
-    resultado: dict[str, Any] = {
-        "coordenadas": {"latitude": lat, "longitude": lon},
-        "data_hora_consultada": data_hora.isoformat() if data_hora else None,
-        "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
-        "dentro_do_brasil_aprox": _dentro_do_brasil_aprox(lat, lon),
-        "erros": {},
+    result: dict[str, Any] = {
+        "coordinates": {"latitude": lat, "longitude": lon},
+        "queried_datetime": dt.isoformat() if dt else None,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "within_brazil_approx": _is_within_brazil_approx(lat, lon),
+        "errors": {},
     }
 
-    tarefas: dict[str, Callable[[], Any]] = {
-        "localizacao": lambda: coletar_localizacao(lat, lon),
-        "elevacao_e_fuso": lambda: coletar_elevacao_e_fuso(lat, lon),
-        "qualidade_do_ar": lambda: coletar_qualidade_do_ar(lat, lon),
-        "normais_climatologicas": lambda: coletar_normais_climatologicas(lat, lon),
-        "solo": lambda: coletar_solo(lat, lon),
-        "areas_protegidas_proximas": lambda: coletar_areas_protegidas(lat, lon, raio_km),
-        "bioma_e_vegetacao": lambda: coletar_bioma_e_vegetacao(lat, lon, caminho_biomas),
-        "declividade_relevo": lambda: coletar_declividade(lat, lon),
-        "distancia_agua": lambda: coletar_distancia_agua(lat, lon, raio_agua_km),
-        "distancia_vegetacao_nativa": lambda: coletar_distancia_vegetacao_nativa(lat, lon, raio_vegetacao_km),
-        "risco_erosao": lambda: coletar_risco_erosao(lat, lon, caminho_erosao),
-        "uso_do_solo": lambda: coletar_uso_do_solo_mapbiomas(lat, lon),
-        "historico_queimadas_local": lambda: coletar_historico_queimadas_local(
-            lat, lon, caminho_banco_queimadas, raio_queimadas_km
+    tasks: dict[str, Callable[[], Any]] = {
+        "location": lambda: collect_location(lat, lon),
+        "elevation_and_timezone": lambda: collect_elevation_and_timezone(lat, lon),
+        "air_quality": lambda: collect_air_quality(lat, lon),
+        "climate_normals": lambda: collect_climate_normals(lat, lon),
+        "soil": lambda: collect_soil(lat, lon),
+        "nearby_protected_areas": lambda: collect_protected_areas(lat, lon, radius_km),
+        "biome_and_vegetation": lambda: collect_biome_and_vegetation(lat, lon, biomes_path),
+        "slope_relief": lambda: collect_slope(lat, lon),
+        "water_distance": lambda: collect_water_distance(lat, lon, water_radius_km),
+        "native_vegetation_distance": lambda: collect_native_vegetation_distance(lat, lon, vegetation_radius_km),
+        "erosion_risk": lambda: collect_erosion_risk(lat, lon, erosion_path),
+        "land_use": lambda: collect_land_use_mapbiomas(lat, lon),
+        "local_fire_history": lambda: collect_local_fire_history(
+            lat, lon, wildfire_db_path, fire_radius_km
         ),
     }
 
-    if data_hora is not None:
-        tarefas["clima_historico"] = lambda: coletar_clima_historico(lat, lon, data_hora)
+    if dt is not None:
+        tasks["historical_weather"] = lambda: collect_historical_weather(lat, lon, dt)
     else:
-        tarefas["clima_atual_e_previsao"] = lambda: coletar_clima_atual_e_previsao(lat, lon)
+        tasks["current_weather_and_forecast"] = lambda: collect_current_weather_and_forecast(lat, lon)
 
-    with ThreadPoolExecutor(max_workers=len(tarefas)) as executor:
-        futuros = {executor.submit(func): nome for nome, func in tarefas.items()}
-        for futuro in as_completed(futuros):
-            nome = futuros[futuro]
+    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        futures = {executor.submit(func): name for name, func in tasks.items()}
+        for future in as_completed(futures):
+            name = futures[future]
             try:
-                resultado[nome] = futuro.result()
-                log.info("OK    %s", nome)
-            except Exception as exc:  # noqa: BLE001 - queremos capturar tudo aqui
-                resultado["erros"][nome] = str(exc)
-                log.warning("FALHA %s -> %s", nome, exc)
+                result[name] = future.result()
+                log.info("OK    %s", name)
+            except Exception as exc:  # noqa: BLE001 - we want to catch everything here
+                result["errors"][name] = str(exc)
+                log.warning("FAILED %s -> %s", name, exc)
 
-    return resultado
+    return result
 
 
 # --------------------------------------------------------------------------
-# Apresentação e CLI
+# Presentation and CLI
 # --------------------------------------------------------------------------
 
-def imprimir_resumo(dados: dict) -> None:
-    lat = dados["coordenadas"]["latitude"]
-    lon = dados["coordenadas"]["longitude"]
+def print_summary(data: dict) -> None:
+    lat = data["coordinates"]["latitude"]
+    lon = data["coordinates"]["longitude"]
     print("\n" + "=" * 70)
-    print(f"  Dados da região ({lat}, {lon})")
-    if dados.get("data_hora_consultada"):
-        print(f"  Data/hora consultada: {dados['data_hora_consultada']}")
+    print(f"  Regional data ({lat}, {lon})")
+    if data.get("queried_datetime"):
+        print(f"  Queried datetime: {data['queried_datetime']}")
     print("=" * 70)
 
-    loc = dados.get("localizacao", {})
+    loc = data.get("location", {})
     if loc:
-        print(f"\n📍 Localização")
-        print(f"   País: {loc.get('pais')}")
-        print(f"   Estado: {loc.get('estado')}")
-        print(f"   Município: {loc.get('municipio')}")
+        print(f"\n📍 Location")
+        print(f"   Country: {loc.get('country')}")
+        print(f"   State: {loc.get('state')}")
+        print(f"   Municipality: {loc.get('municipality')}")
 
-    ele = dados.get("elevacao_e_fuso", {})
-    if ele:
-        print(f"\n⛰  Elevação: {ele.get('elevacao_m')} m   |   Fuso: {ele.get('fuso_horario')}")
+    elev = data.get("elevation_and_timezone", {})
+    if elev:
+        print(f"\n⛰  Elevation: {elev.get('elevation_m')} m   |   Timezone: {elev.get('timezone')}")
 
-    decl = dados.get("declividade_relevo", {})
-    if decl:
-        print(f"\n📐 Relevo")
-        print(f"   Declividade estimada: {decl.get('declividade_pct_estimada')} %   |   Classe: {decl.get('classificacao_relevo')}")
+    slope = data.get("slope_relief", {})
+    if slope:
+        print(f"\n📐 Relief")
+        print(f"   Estimated slope: {slope.get('estimated_slope_pct')} %   |   Class: {slope.get('relief_classification')}")
 
-    bioma = dados.get("bioma_e_vegetacao", {})
-    if bioma and bioma.get("bioma"):
-        print(f"\n🧬 Bioma e vegetação original")
-        print(f"   Bioma: {bioma.get('bioma')}   |   Vegetação original: {bioma.get('vegetacao_original')}")
+    biome = data.get("biome_and_vegetation", {})
+    if biome and biome.get("biome"):
+        print(f"\n🧬 Biome and original vegetation")
+        print(f"   Biome: {biome.get('biome')}   |   Original vegetation: {biome.get('original_vegetation')}")
 
-    uso_solo = dados.get("uso_do_solo", {})
-    if uso_solo and uso_solo.get("uso_do_solo") is not None:
-        print(f"\n🟤 Uso do solo atual: {uso_solo.get('uso_do_solo')}")
+    land_use = data.get("land_use", {})
+    if land_use and land_use.get("land_use") is not None:
+        print(f"\n🟤 Current land use: {land_use.get('land_use')}")
 
-    erosao = dados.get("risco_erosao", {})
-    if erosao and erosao.get("classe_risco_erosao"):
-        print(f"\n⚠️  Risco de erosão do solo: {erosao.get('classe_risco_erosao')}")
+    erosion = data.get("erosion_risk", {})
+    if erosion and erosion.get("erosion_risk_class"):
+        print(f"\n⚠️  Soil erosion risk: {erosion.get('erosion_risk_class')}")
 
-    agua = dados.get("distancia_agua", {}).get("corpo_dagua_mais_proximo")
-    if agua:
-        print(f"\n💧 Corpo d'água mais próximo: {agua.get('nome')} ({agua.get('distancia_km')} km)")
+    water = data.get("water_distance", {}).get("nearest_water_body")
+    if water:
+        print(f"\n💧 Nearest body of water: {water.get('name')} ({water.get('distance_km')} km)")
 
-    veg = dados.get("distancia_vegetacao_nativa", {}).get("fragmento_vegetacao_mais_proximo")
+    veg = data.get("native_vegetation_distance", {}).get("nearest_vegetation_fragment")
     if veg:
-        print(f"\n🌲 Fragmento de vegetação nativa mais próximo: {veg.get('nome')} ({veg.get('distancia_km')} km)")
+        print(f"\n🌲 Nearest native vegetation fragment: {veg.get('name')} ({veg.get('distance_km')} km)")
 
-    if dados.get("data_hora_consultada"):
-        clima = dados.get("clima_historico", {})
-        if clima:
-            print(f"\n🌤  Clima histórico ({clima.get('data_hora_encontrada')})")
-            print(f"   Temperatura: {clima.get('temperatura_c')} °C   |   Umidade: {clima.get('umidade_relativa_pct')} %")
-            print(f"   Precipitação: {clima.get('precipitacao_mm')} mm   |   Vento: {clima.get('vento_kmh')} km/h")
+    if data.get("queried_datetime"):
+        weather = data.get("historical_weather", {})
+        if weather:
+            print(f"\n🌤  Historical weather ({weather.get('found_datetime')})")
+            print(f"   Temperature: {weather.get('temperature_c')} °C   |   Humidity: {weather.get('relative_humidity_pct')} %")
+            print(f"   Precipitation: {weather.get('precipitation_mm')} mm   |   Wind: {weather.get('wind_kmh')} km/h")
     else:
-        clima = dados.get("clima_atual_e_previsao", {}).get("condicoes_atuais", {})
-        if clima:
-            print(f"\n🌤  Clima agora")
-            print(f"   Temperatura: {clima.get('temperatura_c')} °C  (sensação {clima.get('sensacao_termica_c')} °C)")
-            print(f"   Umidade relativa: {clima.get('umidade_relativa_pct')} %")
-            print(f"   Precipitação: {clima.get('precipitacao_mm')} mm   |   Vento: {clima.get('vento_kmh')} km/h")
+        weather = data.get("current_weather_and_forecast", {}).get("current_conditions", {})
+        if weather:
+            print(f"\n🌤  Weather now")
+            print(f"   Temperature: {weather.get('temperature_c')} °C  (feels like {weather.get('apparent_temperature_c')} °C)")
+            print(f"   Relative humidity: {weather.get('relative_humidity_pct')} %")
+            print(f"   Precipitation: {weather.get('precipitation_mm')} mm   |   Wind: {weather.get('wind_kmh')} km/h")
 
-    ar = dados.get("qualidade_do_ar", {})
-    if ar:
-        print(f"\n🫧  Qualidade do ar")
-        print(f"   PM2.5: {ar.get('pm2_5')} µg/m³   |   PM10: {ar.get('pm10')} µg/m³   |   Índice europeu: {ar.get('indice_qualidade_ar_europeu')}")
+    air = data.get("air_quality", {})
+    if air:
+        print(f"\n🫧  Air quality")
+        print(f"   PM2.5: {air.get('pm2_5')} µg/m³   |   PM10: {air.get('pm10')} µg/m³   |   European index: {air.get('european_air_quality_index')}")
 
-    normais = dados.get("normais_climatologicas", {}).get("media_anual", {})
-    if normais:
-        print(f"\n📊 Normais climatológicas (média anual, 1991-2020)")
-        print(f"   Temp. média: {normais.get('temp_media_c')} °C   |   Umidade: {normais.get('umidade_relativa_pct')} %")
-        print(f"   Precipitação: {normais.get('precipitacao_mm_dia')} mm/dia   |   Radiação solar: {normais.get('radiacao_solar_kwh_m2_dia')} kWh/m²/dia")
+    normals = data.get("climate_normals", {}).get("annual_average", {})
+    if normals:
+        print(f"\n📊 Climate normals (annual average, 1991-2020)")
+        print(f"   Avg. temp: {normals.get('avg_temp_c')} °C   |   Humidity: {normals.get('relative_humidity_pct')} %")
+        print(f"   Precipitation: {normals.get('precipitation_mm_day')} mm/day   |   Solar radiation: {normals.get('solar_radiation_kwh_m2_day')} kWh/m²/day")
 
-    solo = dados.get("solo", {})
-    if solo:
-        print(f"\n🌱 Solo (camada 0-5cm)")
-        for prop, info in solo.items():
-            valor = info.get("valores", {}).get("0-5cm")
-            print(f"   {prop}: {valor} {info.get('unidade')}")
+    soil = data.get("soil", {})
+    if soil:
+        print(f"\n🌱 Soil (0-5cm layer)")
+        for prop, info in soil.items():
+            value = info.get("values", {}).get("0-5cm")
+            print(f"   {prop}: {value} {info.get('unit')}")
 
-    ucs = dados.get("areas_protegidas_proximas", [])
-    if ucs:
-        print(f"\n🌳 Áreas protegidas próximas (raio consultado)")
-        for uc in ucs[:5]:
-            print(f"   - {uc.get('nome')} ({uc.get('distancia_aproximada_km')} km) — {uc.get('tipo_osm')}")
+    protected_areas = data.get("nearby_protected_areas", [])
+    if protected_areas:
+        print(f"\n🌳 Nearby protected areas (queried radius)")
+        for pa in protected_areas[:5]:
+            print(f"   - {pa.get('name')} ({pa.get('approximate_distance_km')} km) — {pa.get('osm_type')}")
     else:
-        print(f"\n🌳 Nenhuma área protegida encontrada no raio consultado (ou fonte indisponível).")
+        print(f"\n🌳 No protected areas found in the queried radius (or source unavailable).")
 
-    queimadas = dados.get("historico_queimadas_local", {})
-    if queimadas and queimadas.get("total_focos_no_raio") is not None:
-        print(f"\n🔥 Histórico de queimadas (banco próprio, raio {queimadas.get('raio_consultado_km')} km)")
-        print(f"   Total de focos: {queimadas.get('total_focos_no_raio')}   |   Anos com registro: {queimadas.get('anos_com_registro')}")
+    fires = data.get("local_fire_history", {})
+    if fires and fires.get("total_hotspots_in_radius") is not None:
+        print(f"\n🔥 Wildfire history (in-house database, radius {fires.get('queried_radius_km')} km)")
+        print(f"   Total hotspots: {fires.get('total_hotspots_in_radius')}   |   Years with records: {fires.get('years_with_records')}")
 
-    if dados.get("erros"):
-        print(f"\n⚠️  Fontes que falharam ou não configuradas nesta execução: {list(dados['erros'].keys())}")
+    if data.get("errors"):
+        print(f"\n⚠️  Sources that failed or were not configured in this run: {list(data['errors'].keys())}")
 
     print("\n" + "=" * 70)
-    print("  Dados completos salvos em JSON (ver caminho abaixo).")
+    print("  Full data saved as JSON (see path below).")
     print("=" * 70 + "\n")
 
 
-def salvar_json(dados: dict, pasta_saida: str = "saidas") -> str:
-    os.makedirs(pasta_saida, exist_ok=True)
-    lat = dados["coordenadas"]["latitude"]
-    lon = dados["coordenadas"]["longitude"]
-    carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
-    caminho = os.path.join(pasta_saida, f"regiao_{lat}_{lon}_{carimbo}.json")
-    with open(caminho, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
-    return caminho
+def save_json(data: dict, output_folder: str = "outputs") -> str:
+    os.makedirs(output_folder, exist_ok=True)
+    lat = data["coordinates"]["latitude"]
+    lon = data["coordinates"]["longitude"]
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(output_folder, f"region_{lat}_{lon}_{stamp}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return path
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Coleta o máximo de dados possível sobre uma região a partir de lat/long, "
-                    "com foco em subsidiar decisão de espécie e composição de biocápsula."
+        description="Collects as much data as possible about a region from lat/long, "
+                    "focused on informing species and biocapsule-composition decisions."
     )
-    parser.add_argument("lat", type=float, nargs="?", help="Latitude (ex: -23.5505)")
-    parser.add_argument("lon", type=float, nargs="?", help="Longitude (ex: -46.6333)")
-    parser.add_argument("--lat", dest="lat_flag", type=float, help="Latitude (alternativa)")
-    parser.add_argument("--lon", dest="lon_flag", type=float, help="Longitude (alternativa)")
-    parser.add_argument("--raio", type=float, default=15.0, help="Raio (km) para busca de áreas protegidas")
-    parser.add_argument("--raio-agua", type=float, default=10.0, help="Raio (km) para busca do corpo d'água mais próximo")
-    parser.add_argument("--raio-vegetacao", type=float, default=10.0, help="Raio (km) para busca de fragmento de vegetação nativa mais próximo")
-    parser.add_argument("--raio-queimadas", type=float, default=5.0, help="Raio (km) para cruzar com o histórico de queimadas do banco próprio (Fase 1)")
-    parser.add_argument("--biomas-geojson", type=str, default=CAMINHO_BIOMAS_GEOJSON, help="Caminho do GeoJSON de biomas (IBGE, baixado uma vez)")
-    parser.add_argument("--erosao-geojson", type=str, default=CAMINHO_EROSAO_GEOJSON, help="Caminho do GeoJSON/shapefile de risco de erosão (Embrapa GeoInfo)")
-    parser.add_argument("--banco-queimadas", type=str, default=CAMINHO_BANCO_QUEIMADAS, help="Caminho do banco (SQLite) de focos de queimada da Fase 1")
-    parser.add_argument("--data-hora", type=str, default=None, help="Data/hora ISO (ex: 2026-01-15T14:30) para consultar clima histórico em vez do clima atual")
-    parser.add_argument("--saida", type=str, default="saidas", help="Pasta onde salvar o JSON")
-    parser.add_argument("--sem-dashboard", action="store_true", help="Não gerar o arquivo HTML da dashboard")
+    parser.add_argument("lat", type=float, nargs="?", help="Latitude (e.g. -23.5505)")
+    parser.add_argument("lon", type=float, nargs="?", help="Longitude (e.g. -46.6333)")
+    parser.add_argument("--lat", dest="lat_flag", type=float, help="Latitude (alternative)")
+    parser.add_argument("--lon", dest="lon_flag", type=float, help="Longitude (alternative)")
+    parser.add_argument("--radius", type=float, default=15.0, help="Radius (km) for protected area search")
+    parser.add_argument("--water-radius", type=float, default=10.0, help="Radius (km) for the nearest body of water search")
+    parser.add_argument("--vegetation-radius", type=float, default=10.0, help="Radius (km) for the nearest native vegetation fragment search")
+    parser.add_argument("--fire-radius", type=float, default=5.0, help="Radius (km) to cross-reference with the in-house wildfire history (Phase 1)")
+    parser.add_argument("--biomes-geojson", type=str, default=BIOMES_GEOJSON_PATH, help="Path to the biomes GeoJSON (IBGE, downloaded once)")
+    parser.add_argument("--erosion-geojson", type=str, default=EROSION_GEOJSON_PATH, help="Path to the erosion risk GeoJSON/shapefile (Embrapa GeoInfo)")
+    parser.add_argument("--wildfire-db", type=str, default=WILDFIRE_DB_PATH, help="Path to the (SQLite) wildfire hotspot database from Phase 1")
+    parser.add_argument("--datetime", type=str, default=None, help="ISO datetime (e.g. 2026-01-15T14:30) to query historical weather instead of current weather")
+    parser.add_argument("--output", type=str, default="outputs", help="Folder to save the JSON in")
+    parser.add_argument("--no-dashboard", action="store_true", help="Do not generate the dashboard HTML file")
     args = parser.parse_args()
 
     lat = args.lat if args.lat is not None else args.lat_flag
@@ -1034,42 +1040,42 @@ def main() -> None:
             lat = float(input("Latitude: ").strip())
             lon = float(input("Longitude: ").strip())
         except (ValueError, EOFError):
-            print("Latitude/longitude inválidas.", file=sys.stderr)
+            print("Invalid latitude/longitude.", file=sys.stderr)
             sys.exit(1)
 
     if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
-        print("Coordenadas fora do intervalo válido.", file=sys.stderr)
+        print("Coordinates out of valid range.", file=sys.stderr)
         sys.exit(1)
 
-    data_hora_dt = None
-    if args.data_hora:
+    dt = None
+    if args.datetime:
         try:
-            data_hora_dt = datetime.fromisoformat(args.data_hora)
+            dt = datetime.fromisoformat(args.datetime)
         except ValueError:
-            print("Formato de --data-hora inválido. Use ISO 8601, ex: 2026-01-15T14:30", file=sys.stderr)
+            print("Invalid --datetime format. Use ISO 8601, e.g. 2026-01-15T14:30", file=sys.stderr)
             sys.exit(1)
 
-    log.info("Coletando dados para (%s, %s)...", lat, lon)
-    dados = coletar_tudo(
+    log.info("Collecting data for (%s, %s)...", lat, lon)
+    data = collect_all(
         lat,
         lon,
-        raio_km=args.raio,
-        data_hora=data_hora_dt,
-        raio_agua_km=args.raio_agua,
-        raio_vegetacao_km=args.raio_vegetacao,
-        raio_queimadas_km=args.raio_queimadas,
-        caminho_biomas=args.biomas_geojson,
-        caminho_erosao=args.erosao_geojson,
-        caminho_banco_queimadas=args.banco_queimadas,
+        radius_km=args.radius,
+        dt=dt,
+        water_radius_km=args.water_radius,
+        vegetation_radius_km=args.vegetation_radius,
+        fire_radius_km=args.fire_radius,
+        biomes_path=args.biomes_geojson,
+        erosion_path=args.erosion_geojson,
+        wildfire_db_path=args.wildfire_db,
     )
 
-    imprimir_resumo(dados)
-    caminho = salvar_json(dados, pasta_saida=args.saida)
-    print(f"📄 JSON completo salvo em: {caminho}")
+    print_summary(data)
+    path = save_json(data, output_folder=args.output)
+    print(f"📄 Full JSON saved to: {path}")
 
-    if not args.sem_dashboard:
-        caminho_dashboard = salvar_dashboard(dados, pasta_saida=args.saida)
-        print(f"🗺️  Dashboard salva em: {caminho_dashboard}")
+    if not args.no_dashboard:
+        dashboard_path = save_dashboard(data, output_folder=args.output)
+        print(f"🗺️  Dashboard saved to: {dashboard_path}")
 
 
 if __name__ == "__main__":

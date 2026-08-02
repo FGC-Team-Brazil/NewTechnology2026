@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-ReviveTech — Motor de Decisão de Biocápsulas
+ReviveTech — Biocapsule Decision Engine
 ================================================
-Recebe os dados regionais coletados pelo revivetech_data_collector.py e
-devolve: (1) ranking de espécies recomendadas para a região, com a
-pontuação explicada por critério, e (2) a dosagem sugerida de biochar e
-hidrogel para a cápsula, calibrada a partir de curvas dose-resposta da
-literatura.
+Receives the regional data collected by revivetech_data_collector.py and
+returns: (1) a ranking of recommended species for the region, with the
+score explained by criterion, and (2) the suggested biochar and hydrogel
+dosage for the capsule, calibrated from dose-response curves found in the
+literature.
 
-Este módulo é a "camada determinística" da IA: toda decisão é 100%
-rastreável até um critério numérico e uma fonte bibliográfica — não há
-geração de texto livre aqui (isso fica a cargo de um módulo de relatório
-separado, que só narra o resultado já calculado, nunca decide).
+This module is the "deterministic layer" of the AI: every decision is
+100% traceable to a numeric criterion and a bibliographic source — there
+is no free-text generation here (that is handled by a separate reporting
+module, which only narrates the already-computed result and never
+decides).
 """
 
 from __future__ import annotations
@@ -20,233 +21,236 @@ import json
 from typing import Optional
 
 # --------------------------------------------------------------------------
-# Pesos do sistema de pontuação (somam 1.0)
+# Scoring system weights (sum to 1.0)
 # --------------------------------------------------------------------------
 
-PESOS_CRITERIOS = {
+CRITERIA_WEIGHTS = {
     "ph": 0.30,
-    "agua": 0.25,
-    "inflamabilidade": 0.25,
-    "velocidade_formacao_barreira": 0.10,
-    "valor_socioeconomico": 0.10,
+    "water": 0.25,
+    "flammability": 0.25,
+    "barrier_formation_speed": 0.10,
+    "socioeconomic_value": 0.10,
 }
 
-# Curva dose-resposta de biochar (Sousa et al., biochar misto de espécies do
-# Cerrado): pontos (pH alvo, dose t/ha) conhecidos por tipo de solo.
-CURVA_BIOCHAR_T_HA = {
-    "latossolo_amarelo": [(5.5, 18.0), (6.5, 35.8)],
-    "neossolo_quartzarenico": [(5.5, 12.7), (6.5, 26.5)],
+# Biochar dose-response curve (Sousa et al., mixed-species Cerrado
+# biochar): points (target pH, dose t/ha) known per soil type.
+BIOCHAR_CURVE_T_HA = {
+    "yellow_latosol": [(5.5, 18.0), (6.5, 35.8)],
+    "quartzarenic_neosol": [(5.5, 12.7), (6.5, 26.5)],
 }
 
-HIDROGEL_BASE_G = 2.0  # dose de referência (BOM atual do projeto)
-HIDROGEL_MAX_G = 6.0   # teto plausível para não estourar custo/tamanho da cápsula
+HYDROGEL_BASE_G = 2.0  # reference dose (project's current default)
+HYDROGEL_MAX_G = 6.0   # plausible ceiling to avoid blowing up capsule cost/size
 
 
 # --------------------------------------------------------------------------
-# 1. Carregamento da base de conhecimento
+# 1. Loading the knowledge base
 # --------------------------------------------------------------------------
 
-def carregar_especies(caminho: str = "especies.json") -> list[dict]:
-    with open(caminho, "r", encoding="utf-8") as f:
+def load_species(path: str = "species.json") -> list[dict]:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 # --------------------------------------------------------------------------
-# 2. Extração dos dados relevantes vindos do coletor regional
+# 2. Extracting the relevant data coming from the regional collector
 # --------------------------------------------------------------------------
 
-def _extrair_ph(dados_regiao: dict) -> Optional[float]:
-    solo = dados_regiao.get("solo", {})
-    phh2o = solo.get("phh2o", {}).get("valores", {})
+def _extract_ph(region_data: dict) -> Optional[float]:
+    soil = region_data.get("soil", {})
+    phh2o = soil.get("phh2o", {}).get("values", {})
     return phh2o.get("0-5cm")
 
 
-def _extrair_precipitacao_anual_mm(dados_regiao: dict) -> Optional[float]:
-    normais = dados_regiao.get("normais_climatologicas", {}).get("media_anual", {})
-    mm_dia = normais.get("precipitacao_mm_dia")
-    return mm_dia * 365 if mm_dia is not None else None
+def _extract_annual_precipitation_mm(region_data: dict) -> Optional[float]:
+    normals = region_data.get("climate_normals", {}).get("annual_average", {})
+    mm_day = normals.get("precipitation_mm_day")
+    return mm_day * 365 if mm_day is not None else None
 
 
-def _bioma_compativel(especie: dict, dados_regiao: dict) -> bool:
+def _biome_compatible(species: dict, region_data: dict) -> bool:
     """
-    TODO: o coletor de dados regionais ainda não resolve bioma automaticamente
-    (depende do MapBiomas/Earth Engine — ver README do coletor). Por enquanto
-    aceita qualquer região; quando o bioma entrar no pipeline, comparar aqui
-    com `especie["bioma_alvo"]` e penalizar incompatibilidades.
+    TODO: the regional data collector doesn't automatically resolve biome
+    yet (it depends on MapBiomas/Earth Engine — see the collector's
+    README). For now it accepts any region; once biome enters the
+    pipeline, compare it here against `species["target_biome"]` and
+    penalize mismatches.
     """
     return True
 
 
 # --------------------------------------------------------------------------
-# 3. Pontuação de espécies
+# 3. Species scoring
 # --------------------------------------------------------------------------
 
-def _pontuar_faixa(valor: float, minimo: float, maximo: float) -> float:
-    """1.0 se valor está dentro da faixa ideal; decai linearmente até 0
-    conforme se afasta dos limites (folga de 50% da largura da faixa)."""
-    if minimo <= valor <= maximo:
+def _score_range(value: float, minimum: float, maximum: float) -> float:
+    """1.0 if the value is within the ideal range; decays linearly to 0
+    as it moves away from the limits (slack of 50% of the range width)."""
+    if minimum <= value <= maximum:
         return 1.0
-    folga = (maximo - minimo) * 0.5 or 1.0
-    distancia = (minimo - valor) if valor < minimo else (valor - maximo)
-    return max(0.0, 1.0 - distancia / folga)
+    slack = (maximum - minimum) * 0.5 or 1.0
+    distance = (minimum - value) if value < minimum else (value - maximum)
+    return max(0.0, 1.0 - distance / slack)
 
 
-def pontuar_especie(especie: dict, dados_regiao: dict) -> dict:
-    """Pontua uma espécie (0 a 1) contra os dados enriquecidos da região."""
-    ph_solo = _extrair_ph(dados_regiao)
-    precipitacao = _extrair_precipitacao_anual_mm(dados_regiao)
-    bioma_ok = _bioma_compativel(especie, dados_regiao)
+def score_species(species: dict, region_data: dict) -> dict:
+    """Scores a species (0 to 1) against the enriched regional data."""
+    soil_ph = _extract_ph(region_data)
+    precipitation = _extract_annual_precipitation_mm(region_data)
+    biome_ok = _biome_compatible(species, region_data)
 
-    nota_ph = _pontuar_faixa(ph_solo, especie["ph_min"], especie["ph_max"]) if ph_solo is not None else 0.5
-    nota_agua = min(1.0, precipitacao / especie["precipitacao_min_mm_ano"]) if precipitacao is not None else 0.5
-    nota_inflamabilidade = 1.0 - especie["indice_inflamabilidade"]
-    nota_velocidade = especie["velocidade_formacao_barreira"]
-    nota_socioeconomico = especie["valor_socioeconomico"]
+    ph_score = _score_range(soil_ph, species["ph_min"], species["ph_max"]) if soil_ph is not None else 0.5
+    water_score = min(1.0, precipitation / species["min_precipitation_mm_year"]) if precipitation is not None else 0.5
+    flammability_score = 1.0 - species["flammability_index"]
+    speed_score = species["barrier_formation_speed"]
+    socioeconomic_score = species["socioeconomic_value"]
 
-    subnotas = {
-        "ph": round(nota_ph, 3),
-        "agua": round(nota_agua, 3),
-        "inflamabilidade": round(nota_inflamabilidade, 3),
-        "velocidade_formacao_barreira": round(nota_velocidade, 3),
-        "valor_socioeconomico": round(nota_socioeconomico, 3),
+    sub_scores = {
+        "ph": round(ph_score, 3),
+        "water": round(water_score, 3),
+        "flammability": round(flammability_score, 3),
+        "barrier_formation_speed": round(speed_score, 3),
+        "socioeconomic_value": round(socioeconomic_score, 3),
     }
 
-    bruta = sum(subnotas[c] * PESOS_CRITERIOS[c] for c in PESOS_CRITERIOS)
-    pontuacao_final = bruta if bioma_ok else bruta * 0.2  # penalidade forte fora do bioma
+    raw = sum(sub_scores[c] * CRITERIA_WEIGHTS[c] for c in CRITERIA_WEIGHTS)
+    final_score = raw if biome_ok else raw * 0.2  # heavy penalty when out of biome
 
     return {
-        "especie": especie["nome_popular"],
-        "nome_cientifico": especie["nome_cientifico"],
-        "bioma_compativel": bioma_ok,
-        "pontuacao_final": round(pontuacao_final, 3),
-        "subnotas": subnotas,
-        "fonte": especie.get("fonte"),
+        "species": species["common_name"],
+        "scientific_name": species["scientific_name"],
+        "biome_compatible": biome_ok,
+        "final_score": round(final_score, 3),
+        "sub_scores": sub_scores,
+        "source": species.get("source"),
     }
 
 
-def recomendar_especies(dados_regiao: dict, especies: list[dict], top_n: int = 3) -> list[dict]:
-    ranking = [pontuar_especie(e, dados_regiao) for e in especies]
-    ranking.sort(key=lambda r: r["pontuacao_final"], reverse=True)
+def recommend_species(region_data: dict, species_list: list[dict], top_n: int = 3) -> list[dict]:
+    ranking = [score_species(e, region_data) for e in species_list]
+    ranking.sort(key=lambda r: r["final_score"], reverse=True)
     return ranking[:top_n]
 
 
 # --------------------------------------------------------------------------
-# 4. Dosagem de biochar (curva dose-resposta da literatura)
+# 4. Biochar dosage (dose-response curve from the literature)
 # --------------------------------------------------------------------------
 
-def calcular_dose_biochar_t_ha(ph_atual: float, ph_alvo: float, tipo_solo: str = "latossolo_amarelo") -> float:
-    """Interpola/extrapola linearmente a dose de biochar (t/ha) necessária
-    para elevar o solo até o pH alvo, a partir dos dois pontos conhecidos
-    do estudo em solos de Cerrado."""
-    pontos = CURVA_BIOCHAR_T_HA.get(tipo_solo, CURVA_BIOCHAR_T_HA["latossolo_amarelo"])
-    (ph1, d1), (ph2, d2) = pontos
-    if ph_atual >= ph_alvo:
+def calculate_biochar_dose_t_ha(current_ph: float, target_ph: float, soil_type: str = "yellow_latosol") -> float:
+    """Linearly interpolates/extrapolates the biochar dose (t/ha) needed
+    to raise the soil to the target pH, from the two known points of the
+    Cerrado-soil study."""
+    points = BIOCHAR_CURVE_T_HA.get(soil_type, BIOCHAR_CURVE_T_HA["yellow_latosol"])
+    (ph1, d1), (ph2, d2) = points
+    if current_ph >= target_ph:
         return 0.0
-    inclinacao = (d2 - d1) / (ph2 - ph1)
-    dose_no_alvo = d1 + inclinacao * (ph_alvo - ph1)
-    return max(0.0, round(dose_no_alvo, 2))
+    slope = (d2 - d1) / (ph2 - ph1)
+    dose_at_target = d1 + slope * (target_ph - ph1)
+    return max(0.0, round(dose_at_target, 2))
 
 
-def dose_biochar_por_capsula_g(dose_t_ha: float, capsulas_por_m2: float) -> float:
-    """Converte t/ha para gramas por cápsula, dada a densidade de plantio."""
-    if capsulas_por_m2 <= 0:
+def biochar_dose_per_capsule_g(dose_t_ha: float, capsules_per_m2: float) -> float:
+    """Converts t/ha into grams per capsule, given the planting density."""
+    if capsules_per_m2 <= 0:
         return 0.0
-    gramas_por_m2 = (dose_t_ha * 1_000_000) / 10_000
-    return round(gramas_por_m2 / capsulas_por_m2, 2)
+    grams_per_m2 = (dose_t_ha * 1_000_000) / 10_000
+    return round(grams_per_m2 / capsules_per_m2, 2)
 
 
 # --------------------------------------------------------------------------
-# 5. Dosagem de hidrogel (heurística de déficit hídrico)
+# 5. Hydrogel dosage (water-deficit heuristic)
 # --------------------------------------------------------------------------
 
-def calcular_dose_hidrogel_g(precipitacao_anual_mm: Optional[float], precipitacao_min_especie: float) -> float:
-    """Quanto maior o déficit entre a precipitação da região e a necessidade
-    mínima da espécie, maior a proporção de hidrogel — até um teto."""
-    if precipitacao_anual_mm is None or not precipitacao_min_especie:
-        return HIDROGEL_BASE_G
-    deficit = max(0.0, precipitacao_min_especie - precipitacao_anual_mm)
-    deficit_relativo = min(1.0, deficit / precipitacao_min_especie)
-    return round(HIDROGEL_BASE_G + deficit_relativo * (HIDROGEL_MAX_G - HIDROGEL_BASE_G), 2)
+def calculate_hydrogel_dose_g(annual_precipitation_mm: Optional[float], species_min_precipitation: float) -> float:
+    """The greater the deficit between the region's precipitation and the
+    species' minimum requirement, the higher the hydrogel proportion — up
+    to a ceiling."""
+    if annual_precipitation_mm is None or not species_min_precipitation:
+        return HYDROGEL_BASE_G
+    deficit = max(0.0, species_min_precipitation - annual_precipitation_mm)
+    relative_deficit = min(1.0, deficit / species_min_precipitation)
+    return round(HYDROGEL_BASE_G + relative_deficit * (HYDROGEL_MAX_G - HYDROGEL_BASE_G), 2)
 
 
 # --------------------------------------------------------------------------
-# 6. Orquestração — junta tudo num único resultado
+# 6. Orchestration — brings everything together into a single result
 # --------------------------------------------------------------------------
 
-def recomendar_biocapsula(
-    dados_regiao: dict,
-    caminho_especies: str = "especies.json",
-    tipo_solo: str = "latossolo_amarelo",
-    capsulas_por_m2: float = 4.0,
+def recommend_biocapsule(
+    region_data: dict,
+    species_path: str = "species.json",
+    soil_type: str = "yellow_latosol",
+    capsules_per_m2: float = 4.0,
     top_n: int = 3,
 ) -> dict:
-    especies = carregar_especies(caminho_especies)
-    ranking = recomendar_especies(dados_regiao, especies, top_n=top_n)
+    species_list = load_species(species_path)
+    ranking = recommend_species(region_data, species_list, top_n=top_n)
 
-    ph_atual = _extrair_ph(dados_regiao)
-    precipitacao_anual = _extrair_precipitacao_anual_mm(dados_regiao)
+    current_ph = _extract_ph(region_data)
+    annual_precipitation = _extract_annual_precipitation_mm(region_data)
 
-    recomendacoes = []
+    recommendations = []
     for r in ranking:
-        especie_completa = next(e for e in especies if e["nome_popular"] == r["especie"])
-        ph_alvo = especie_completa["ph_min"]
-        dose_biochar_t_ha = (
-            calcular_dose_biochar_t_ha(ph_atual, ph_alvo, tipo_solo) if ph_atual is not None else None
+        full_species = next(e for e in species_list if e["common_name"] == r["species"])
+        target_ph = full_species["ph_min"]
+        biochar_dose_t_ha = (
+            calculate_biochar_dose_t_ha(current_ph, target_ph, soil_type) if current_ph is not None else None
         )
-        dose_biochar_g = (
-            dose_biochar_por_capsula_g(dose_biochar_t_ha, capsulas_por_m2)
-            if dose_biochar_t_ha is not None else None
+        biochar_dose_g = (
+            biochar_dose_per_capsule_g(biochar_dose_t_ha, capsules_per_m2)
+            if biochar_dose_t_ha is not None else None
         )
-        dose_hidrogel_g = calcular_dose_hidrogel_g(precipitacao_anual, especie_completa["precipitacao_min_mm_ano"])
+        hydrogel_dose_g = calculate_hydrogel_dose_g(annual_precipitation, full_species["min_precipitation_mm_year"])
 
-        recomendacoes.append({
+        recommendations.append({
             **r,
-            "dosagem_capsula": {
-                "biochar_g": dose_biochar_g,
-                "biochar_t_ha_equivalente": dose_biochar_t_ha,
-                "hidrogel_g": dose_hidrogel_g,
-                "tipo_solo_considerado": tipo_solo,
+            "capsule_dosage": {
+                "biochar_g": biochar_dose_g,
+                "biochar_t_ha_equivalent": biochar_dose_t_ha,
+                "hydrogel_g": hydrogel_dose_g,
+                "soil_type_considered": soil_type,
             },
         })
 
     return {
-        "ph_solo_ponto": ph_atual,
-        "precipitacao_anual_mm_ponto": precipitacao_anual,
-        "capsulas_por_m2_consideradas": capsulas_por_m2,
-        "recomendacoes": recomendacoes,
+        "point_soil_ph": current_ph,
+        "point_annual_precipitation_mm": annual_precipitation,
+        "capsules_per_m2_considered": capsules_per_m2,
+        "recommendations": recommendations,
     }
 
 
 # --------------------------------------------------------------------------
-# CLI simples: lê um JSON já coletado (saída do revivetech_data_collector.py)
+# Simple CLI: reads an already-collected JSON (output of
+# revivetech_data_collector.py)
 # --------------------------------------------------------------------------
 
 def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Recomenda espécie + dosagem de biocápsula a partir de um JSON de dados regionais."
+        description="Recommends a species + biocapsule dosage from a regional data JSON."
     )
-    parser.add_argument("json_dados_regiao", help="Caminho do JSON gerado pelo revivetech_data_collector.py")
-    parser.add_argument("--especies", default="especies.json", help="Caminho do JSON de espécies")
-    parser.add_argument("--tipo-solo", default="latossolo_amarelo",
-                         choices=list(CURVA_BIOCHAR_T_HA.keys()))
-    parser.add_argument("--capsulas-por-m2", type=float, default=4.0)
+    parser.add_argument("region_data_json", help="Path to the JSON generated by revivetech_data_collector.py")
+    parser.add_argument("--species", default="species.json", help="Path to the species JSON")
+    parser.add_argument("--soil-type", default="yellow_latosol",
+                         choices=list(BIOCHAR_CURVE_T_HA.keys()))
+    parser.add_argument("--capsules-per-m2", type=float, default=4.0)
     parser.add_argument("--top", type=int, default=3)
     args = parser.parse_args()
 
-    with open(args.json_dados_regiao, "r", encoding="utf-8") as f:
-        dados_regiao = json.load(f)
+    with open(args.region_data_json, "r", encoding="utf-8") as f:
+        region_data = json.load(f)
 
-    resultado = recomendar_biocapsula(
-        dados_regiao,
-        caminho_especies=args.especies,
-        tipo_solo=args.tipo_solo,
-        capsulas_por_m2=args.capsulas_por_m2,
+    result = recommend_biocapsule(
+        region_data,
+        species_path=args.species,
+        soil_type=args.soil_type,
+        capsules_per_m2=args.capsules_per_m2,
         top_n=args.top,
     )
 
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
