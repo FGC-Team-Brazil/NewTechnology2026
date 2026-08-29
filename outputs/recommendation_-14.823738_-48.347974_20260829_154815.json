@@ -1,0 +1,449 @@
+{
+  "region_data": {
+    "coordinates": {
+      "latitude": -14.823738,
+      "longitude": -48.347974
+    },
+    "queried_datetime": null,
+    "generated_at_utc": "2026-08-29T18:47:57.166154+00:00",
+    "within_brazil_approx": true,
+    "errors": {
+      "erosion_risk": "File not found: local_data/embrapa_erosion_risk.geojson (download the layer once and point to the correct path — see module docstring)",
+      "biome_and_vegetation": "File not found: local_data/ibge_biomes.geojson (download the layer once and point to the correct path — see module docstring)",
+      "local_fire_history": "Wildfire database not found at: local_data/inpe_wildfires.db (point to the database generated in Phase 1 of the project)"
+    },
+    "land_use": {
+      "land_use": null,
+      "note": "MapBiomas disabled — requires Earth Engine registration (see the collect_land_use_mapbiomas function docstring)"
+    },
+    "location": {
+      "display_name": "Niquelândia, Goiás, Região Centro-Oeste, 76420-000, Brasil",
+      "country": "Brasil",
+      "state": "Goiás",
+      "municipality": "Niquelândia",
+      "neighborhood_district": null,
+      "approximate_postal_code": "76420-000",
+      "osm_type": "administrative",
+      "osm_category": "boundary",
+      "osm_id": 334617
+    },
+    "slope_relief": {
+      "estimated_slope_pct": 50.0,
+      "relief_classification": "mountainous",
+      "sampling_distance_m": 100.0,
+      "point_elevations_m": {
+        "center": 1064.0,
+        "north": 1086.0,
+        "south": 1014.0,
+        "east": 1051.0,
+        "west": 1042.0
+      },
+      "note": "estimate from a 5-point grid (Open-Meteo); for higher precision, use local SRTM"
+    },
+    "air_quality": {
+      "pm10": 8.0,
+      "pm2_5": 6.8,
+      "carbon_monoxide": 124.0,
+      "nitrogen_dioxide": 0.7,
+      "ozone": 101.0,
+      "uv_index": 3.2,
+      "european_air_quality_index": 41
+    },
+    "current_weather_and_forecast": {
+      "current_conditions": {
+        "temperature_c": 33.0,
+        "relative_humidity_pct": 20,
+        "apparent_temperature_c": 31.8,
+        "precipitation_mm": 0.0,
+        "cloud_cover_pct": 74,
+        "surface_pressure_hpa": 897.6,
+        "wind_kmh": 2.6,
+        "wind_direction_deg": 124,
+        "wmo_weather_code": 2
+      },
+      "forecast_7_days": [
+        {
+          "date": "2026-08-29",
+          "temp_max_c": 33.3,
+          "temp_min_c": 20.7,
+          "total_precipitation_mm": 0.0,
+          "precipitation_probability_pct": 0,
+          "max_wind_kmh": 12.1,
+          "max_uv_index": 7.8
+        },
+        {
+          "date": "2026-08-30",
+          "temp_max_c": 33.5,
+          "temp_min_c": 21.3,
+          "total_precipitation_mm": 0.0,
+          "precipitation_probability_pct": 0,
+          "max_wind_kmh": 13.4,
+          "max_uv_index": 7.95
+        },
+        {
+          "date": "2026-08-31",
+          "temp_max_c": 33.8,
+          "temp_min_c": 22.8,
+          "total_precipitation_mm": 0.0,
+          "precipitation_probability_pct": 0,
+          "max_wind_kmh": 16.4,
+          "max_uv_index": 8.2
+        },
+        {
+          "date": "2026-09-01",
+          "temp_max_c": 34.5,
+          "temp_min_c": 21.0,
+          "total_precipitation_mm": 0.0,
+          "precipitation_probability_pct": 0,
+          "max_wind_kmh": 19.4,
+          "max_uv_index": 8.25
+        },
+        {
+          "date": "2026-09-02",
+          "temp_max_c": 33.5,
+          "temp_min_c": 21.5,
+          "total_precipitation_mm": 0.0,
+          "precipitation_probability_pct": 12,
+          "max_wind_kmh": 15.2,
+          "max_uv_index": 8.25
+        },
+        {
+          "date": "2026-09-03",
+          "temp_max_c": 32.9,
+          "temp_min_c": 21.6,
+          "total_precipitation_mm": 0.0,
+          "precipitation_probability_pct": 16,
+          "max_wind_kmh": 12.4,
+          "max_uv_index": 7.45
+        },
+        {
+          "date": "2026-09-04",
+          "temp_max_c": 32.4,
+          "temp_min_c": 21.5,
+          "total_precipitation_mm": 1.2,
+          "precipitation_probability_pct": 20,
+          "max_wind_kmh": 16.2,
+          "max_uv_index": 7.35
+        }
+      ]
+    },
+    "climate_normals": {
+      "source": "NASA POWER (1991-2020 historical series)",
+      "annual_average": {
+        "avg_temp_c": 23.5,
+        "relative_humidity_pct": 65.33,
+        "precipitation_mm_day": 3.34,
+        "solar_radiation_kwh_m2_day": 19.84,
+        "wind_m_s": 2.22
+      },
+      "by_month": {
+        "JAN": {
+          "avg_temp_c": 23.32,
+          "temp_max_c": 36.18,
+          "temp_min_c": 14.74,
+          "relative_humidity_pct": 79.92,
+          "precipitation_mm_day": 6.37,
+          "solar_radiation_kwh_m2_day": 20.0,
+          "wind_m_s": 1.78
+        },
+        "FEB": {
+          "avg_temp_c": 23.18,
+          "temp_max_c": 36.19,
+          "temp_min_c": 15.56,
+          "relative_humidity_pct": 80.62,
+          "precipitation_mm_day": 5.97,
+          "solar_radiation_kwh_m2_day": 20.27,
+          "wind_m_s": 1.67
+        },
+        "MAR": {
+          "avg_temp_c": 23.02,
+          "temp_max_c": 34.19,
+          "temp_min_c": 15.29,
+          "relative_humidity_pct": 82.28,
+          "precipitation_mm_day": 6.1,
+          "solar_radiation_kwh_m2_day": 19.61,
+          "wind_m_s": 1.66
+        },
+        "APR": {
+          "avg_temp_c": 22.54,
+          "temp_max_c": 33.62,
+          "temp_min_c": 11.92,
+          "relative_humidity_pct": 79.74,
+          "precipitation_mm_day": 3.13,
+          "solar_radiation_kwh_m2_day": 19.47,
+          "wind_m_s": 1.9
+        },
+        "MAY": {
+          "avg_temp_c": 21.85,
+          "temp_max_c": 34.56,
+          "temp_min_c": 10.45,
+          "relative_humidity_pct": 69.77,
+          "precipitation_mm_day": 0.61,
+          "solar_radiation_kwh_m2_day": 18.56,
+          "wind_m_s": 2.18
+        },
+        "JUN": {
+          "avg_temp_c": 21.69,
+          "temp_max_c": 35.14,
+          "temp_min_c": 11.79,
+          "relative_humidity_pct": 57.98,
+          "precipitation_mm_day": 0.09,
+          "solar_radiation_kwh_m2_day": 18.14,
+          "wind_m_s": 2.64
+        },
+        "JUL": {
+          "avg_temp_c": 22.09,
+          "temp_max_c": 34.37,
+          "temp_min_c": 8.97,
+          "relative_humidity_pct": 47.05,
+          "precipitation_mm_day": 0.03,
+          "solar_radiation_kwh_m2_day": 19.18,
+          "wind_m_s": 2.91
+        },
+        "AUG": {
+          "avg_temp_c": 24.01,
+          "temp_max_c": 36.37,
+          "temp_min_c": 10.91,
+          "relative_humidity_pct": 39.66,
+          "precipitation_mm_day": 0.25,
+          "solar_radiation_kwh_m2_day": 21.3,
+          "wind_m_s": 3.07
+        },
+        "SEP": {
+          "avg_temp_c": 26.32,
+          "temp_max_c": 39.24,
+          "temp_min_c": 14.35,
+          "relative_humidity_pct": 39.55,
+          "precipitation_mm_day": 0.98,
+          "solar_radiation_kwh_m2_day": 21.78,
+          "wind_m_s": 2.9
+        },
+        "OCT": {
+          "avg_temp_c": 26.43,
+          "temp_max_c": 40.53,
+          "temp_min_c": 15.14,
+          "relative_humidity_pct": 54.6,
+          "precipitation_mm_day": 3.58,
+          "solar_radiation_kwh_m2_day": 20.85,
+          "wind_m_s": 2.29
+        },
+        "NOV": {
+          "avg_temp_c": 24.11,
+          "temp_max_c": 38.85,
+          "temp_min_c": 15.49,
+          "relative_humidity_pct": 74.98,
+          "precipitation_mm_day": 6.54,
+          "solar_radiation_kwh_m2_day": 19.42,
+          "wind_m_s": 1.84
+        },
+        "DEC": {
+          "avg_temp_c": 23.47,
+          "temp_max_c": 36.34,
+          "temp_min_c": 15.29,
+          "relative_humidity_pct": 78.9,
+          "precipitation_mm_day": 6.61,
+          "solar_radiation_kwh_m2_day": 19.54,
+          "wind_m_s": 1.75
+        }
+      }
+    },
+    "nearby_protected_areas": [],
+    "elevation_and_timezone": {
+      "elevation_m": 1064.0,
+      "timezone": "America/Sao_Paulo",
+      "utc_offset_seconds": -10800
+    },
+    "native_vegetation_distance": {
+      "nearest_vegetation_fragment": null,
+      "note": "none found within 10.0 km"
+    },
+    "soil": {
+      "bdod": {
+        "unit": "kg/dm³ (bulk density)",
+        "values": {
+          "0-5cm": 1.2,
+          "5-15cm": 1.22
+        }
+      },
+      "cec": {
+        "unit": "cmol(c)/kg (CEC)",
+        "values": {
+          "0-5cm": 9.9,
+          "5-15cm": 8.5
+        }
+      },
+      "cfvo": {
+        "unit": "% (coarse fragments)",
+        "values": {
+          "0-5cm": 5.3,
+          "5-15cm": 5.2
+        }
+      },
+      "clay": {
+        "unit": "% (clay)",
+        "values": {
+          "0-5cm": 38.1,
+          "5-15cm": 40.3
+        }
+      },
+      "nitrogen": {
+        "unit": "g/kg (total nitrogen)",
+        "values": {
+          "0-5cm": 1.95,
+          "5-15cm": 1.58
+        }
+      },
+      "ocd": {
+        "unit": "kg/m³ (organic carbon density)",
+        "values": {
+          "0-5cm": 34.7,
+          "5-15cm": 29.7
+        }
+      },
+      "phh2o": {
+        "unit": "pH in water",
+        "values": {
+          "0-5cm": 5.3,
+          "5-15cm": 5.2
+        }
+      },
+      "sand": {
+        "unit": "% (sand)",
+        "values": {
+          "0-5cm": 35.7,
+          "5-15cm": 34.2
+        }
+      },
+      "silt": {
+        "unit": "% (silt)",
+        "values": {
+          "0-5cm": 26.3,
+          "5-15cm": 25.5
+        }
+      },
+      "soc": {
+        "unit": "g/kg (soil organic carbon)",
+        "values": {
+          "0-5cm": 33.7,
+          "5-15cm": 26.9
+        }
+      }
+    },
+    "water_distance": {
+      "nearest_water_body": {
+        "name": "(unnamed in OSM)",
+        "type": "stream",
+        "distance_km": 2.463
+      }
+    }
+  },
+  "biocapsule_recommendation": {
+    "point_soil_ph": 5.3,
+    "point_annual_precipitation_mm": 1219.1,
+    "capsules_per_m2_considered": 4.0,
+    "recommendations": [
+      {
+        "species": "Baru",
+        "scientific_name": "Dipteryx alata",
+        "biome_compatible": true,
+        "final_score": 0.85,
+        "sub_scores": {
+          "ph": 1.0,
+          "water": 1.0,
+          "flammability": 0.7,
+          "barrier_formation_speed": 0.3,
+          "socioeconomic_value": 0.95
+        },
+        "source": "ReviveTech project document (seed selection table, section 9)",
+        "capsule_dosage": {
+          "biochar_g": 0.0,
+          "biochar_t_ha_equivalent": 0.0,
+          "hydrogel_g": 2.0,
+          "soil_type_considered": "yellow_latosol",
+          "baseline_dosage": {
+            "biochar_g": 0.0,
+            "hydrogel_g": 2.0
+          },
+          "ai_dosage": null,
+          "suggested_dosage": {
+            "biochar_g": 0.0,
+            "hydrogel_g": 2.0
+          },
+          "suggested_dosage_source": "dose_response_curve_heuristic"
+        }
+      },
+      {
+        "species": "Douradinha (Palicourea rigida)",
+        "scientific_name": "Palicourea rigida",
+        "biome_compatible": true,
+        "final_score": 0.85,
+        "sub_scores": {
+          "ph": 1.0,
+          "water": 1.0,
+          "flammability": 0.88,
+          "barrier_formation_speed": 0.6,
+          "socioeconomic_value": 0.2
+        },
+        "source": "Thermal characterization study of Cerrado plants — highest leaf moisture content (173%) among the species tested, best performance in the group",
+        "capsule_dosage": {
+          "biochar_g": 0.0,
+          "biochar_t_ha_equivalent": 0.0,
+          "hydrogel_g": 2.0,
+          "soil_type_considered": "yellow_latosol",
+          "baseline_dosage": {
+            "biochar_g": 0.0,
+            "hydrogel_g": 2.0
+          },
+          "ai_dosage": null,
+          "suggested_dosage": {
+            "biochar_g": 0.0,
+            "hydrogel_g": 2.0
+          },
+          "suggested_dosage_source": "dose_response_curve_heuristic"
+        }
+      },
+      {
+        "species": "Lobeira",
+        "scientific_name": "Solanum lycocarpum",
+        "biome_compatible": true,
+        "final_score": 0.843,
+        "sub_scores": {
+          "ph": 1.0,
+          "water": 1.0,
+          "flammability": 0.65,
+          "barrier_formation_speed": 0.9,
+          "socioeconomic_value": 0.4
+        },
+        "source": "ReviveTech project document (seed selection table, section 9)",
+        "capsule_dosage": {
+          "biochar_g": 0.0,
+          "biochar_t_ha_equivalent": 0.0,
+          "hydrogel_g": 2.0,
+          "soil_type_considered": "yellow_latosol",
+          "baseline_dosage": {
+            "biochar_g": 0.0,
+            "hydrogel_g": 2.0
+          },
+          "ai_dosage": null,
+          "suggested_dosage": {
+            "biochar_g": 0.0,
+            "hydrogel_g": 2.0
+          },
+          "suggested_dosage_source": "dose_response_curve_heuristic"
+        }
+      }
+    ],
+    "point_features_used_by_ai": {
+      "soil_ph": 5.3,
+      "annual_precipitation_mm": 1219.1,
+      "slope_pct": 50.0,
+      "elevation_m": 1064.0,
+      "avg_temp_c": 23.5,
+      "fire_recurrence_years": null,
+      "water_distance_km": 2.463,
+      "native_vegetation_distance_km": null,
+      "biome": null
+    },
+    "ai_dataset_path": "ai_training_data.jsonl"
+  }
+}
