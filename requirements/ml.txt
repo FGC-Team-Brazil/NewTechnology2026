@@ -1,0 +1,7 @@
+# Dependências de Machine Learning — a instalar quando o módulo ml/ for desenvolvido
+# Por enquanto mantidas comentadas para não pesar o ambiente padrão.
+# Descomente e execute: pip install -r requirements/ml.txt
+#
+# scikit-learn>=1.4
+# numpy>=1.26
+# joblib>=1.3

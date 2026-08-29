@@ -1,0 +1,5 @@
+# Dependências geoespaciais — necessárias para gerar a planilha consolidada
+-r base.txt
+geopandas>=0.14
+shapely>=2.0
+pyproj>=3.6

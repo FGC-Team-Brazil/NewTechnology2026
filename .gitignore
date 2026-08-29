@@ -1,16 +1,59 @@
+# ─────────────────────────────────────────────
+# ReviveTech 2026 — .gitignore
+# ─────────────────────────────────────────────
+
+# === Python ===
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
 
+# === Ambientes virtuais ===
+.venv/
+venv/
+env/
+.env
+
+# === Banco de dados local ===
 *.db
+*.sqlite3
+dados_locais/
+data/local/
 
-# Arquivos grandes gerados
+# === Dados brutos (grandes) ===
 arquivo_unificado.csv
+planilha_fogos_consolidados.csv
 enriched_hotspots.csv
 
-# Saídas geradas
+# === Dados diários do scraper ===
+focos_diarios/
+
+# === Outputs gerados (dashboards, recomendações, JSONs) ===
 outputs/
 saidas/
-geodata/outputs/
+geodataoutputs/
 
-# Dados diários
-focos_diarios/
+# === Machine Learning — dados de treino e modelos ===
+ml/datasets/*.jsonl
+ml/datasets/*.csv
+ml/models/
+*.pkl
+*.joblib
+
+# === Jupyter ===
+.ipynb_checkpoints/
+
+# === IDEs e editores ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Sistema operacional ===
+.DS_Store
+Thumbs.db

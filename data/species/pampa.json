@@ -1,0 +1,17 @@
+[
+  {
+    "_comment": "TODO — Adicionar espécies nativas do Pampa. Schema idêntico ao cerrado.json.",
+    "common_name": "TODO",
+    "scientific_name": "TODO",
+    "target_biome": "Pampa",
+    "ph_min": null,
+    "ph_max": null,
+    "min_precipitation_mm_year": null,
+    "flammability_index": null,
+    "dormancy_mechanism": "TODO",
+    "barrier_formation_speed": null,
+    "socioeconomic_value": null,
+    "source": "TODO",
+    "values_confidence": {}
+  }
+]

@@ -1,0 +1,8 @@
+# ReviveTech 2026 — Requirements Unificado
+# Instala TODAS as dependências (base + geodata).
+# Para instalar só o essencial: pip install -r requirements/base.txt
+# Para instalar com geo:        pip install -r requirements/geodata.txt
+# Para instalar ML (futuro):    pip install -r requirements/ml.txt
+# Para desenvolvimento:         pip install -r requirements/dev.txt
+
+-r requirements/geodata.txt

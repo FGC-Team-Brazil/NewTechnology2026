@@ -1,0 +1,5 @@
+# Dependências de desenvolvimento e qualidade de código
+-r base.txt
+pytest>=8.0
+ruff>=0.4
+black>=24.0
