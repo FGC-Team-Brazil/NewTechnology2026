@@ -1,0 +1,107 @@
+[
+  {
+    "common_name": "Jatobá-do-cerrado",
+    "scientific_name": "Hymenaea stigonocarpa",
+    "target_biome": "Cerrado",
+    "ph_min": 4.5,
+    "ph_max": 6.5,
+    "min_precipitation_mm_year": 800,
+    "flammability_index": 0.30,
+    "dormancy_mechanism": "very hard seed coat — focus of the project's galvanic-cell validation",
+    "barrier_formation_speed": 0.40,
+    "socioeconomic_value": 0.60,
+    "source": "ReviveTech project document (seed selection table, section 9)",
+    "values_confidence": {
+      "ph_and_precipitation": "estimated (typical Cerrado range, not measured specifically for the species)",
+      "flammability_and_socioeconomic": "based on the project document"
+    }
+  },
+  {
+    "common_name": "Lobeira",
+    "scientific_name": "Solanum lycocarpum",
+    "target_biome": "Cerrado",
+    "ph_min": 4.5,
+    "ph_max": 6.0,
+    "min_precipitation_mm_year": 700,
+    "flammability_index": 0.35,
+    "dormancy_mechanism": "frugivory-based dispersal (maned wolf); germination facilitated by passage through the digestive tract",
+    "barrier_formation_speed": 0.90,
+    "socioeconomic_value": 0.40,
+    "source": "ReviveTech project document (seed selection table, section 9)",
+    "values_confidence": {
+      "ph_and_precipitation": "estimated (typical Cerrado range)",
+      "barrier_formation_speed": "based on the project document (\"very fast growth\")"
+    }
+  },
+  {
+    "common_name": "Baru",
+    "scientific_name": "Dipteryx alata",
+    "target_biome": "Cerrado",
+    "ph_min": 4.5,
+    "ph_max": 6.5,
+    "min_precipitation_mm_year": 800,
+    "flammability_index": 0.30,
+    "dormancy_mechanism": "rigid seed coat, natural scarification",
+    "barrier_formation_speed": 0.30,
+    "socioeconomic_value": 0.95,
+    "source": "ReviveTech project document (seed selection table, section 9)",
+    "values_confidence": {
+      "ph_and_precipitation": "estimated (typical Cerrado range)",
+      "socioeconomic_value": "based on the project document (high commercial value of the fruit)"
+    }
+  },
+  {
+    "common_name": "Vochysia thyrsoidea",
+    "scientific_name": "Vochysia thyrsoidea",
+    "target_biome": "Cerrado",
+    "ph_min": 4.3,
+    "ph_max": 5.8,
+    "min_precipitation_mm_year": 900,
+    "flammability_index": 0.15,
+    "dormancy_mechanism": "not studied in the material surveyed — TODO",
+    "barrier_formation_speed": 0.50,
+    "socioeconomic_value": 0.30,
+    "source": "Thermal characterization study of Cerrado plants (Biodiversidade Brasileira/ICMBio, Ciência Florestal) — ignition after 117s, TIE 236°C",
+    "values_confidence": {
+      "flammability": "based on a published study (strongest data point in the database)",
+      "ph_and_precipitation": "estimated (typical range for dystrophic Cerrado soils)",
+      "socioeconomic_value": "estimated (species with mostly ecological value)"
+    }
+  },
+  {
+    "common_name": "Douradinha (Palicourea rigida)",
+    "scientific_name": "Palicourea rigida",
+    "target_biome": "Cerrado",
+    "ph_min": 4.3,
+    "ph_max": 5.8,
+    "min_precipitation_mm_year": 850,
+    "flammability_index": 0.12,
+    "dormancy_mechanism": "not studied in the material surveyed — TODO",
+    "barrier_formation_speed": 0.60,
+    "socioeconomic_value": 0.20,
+    "source": "Thermal characterization study of Cerrado plants — highest leaf moisture content (173%) among the species tested, best performance in the group",
+    "values_confidence": {
+      "flammability": "based on a published study (best thermal performance in the tested group)",
+      "ph_and_precipitation": "estimated",
+      "socioeconomic_value": "estimated"
+    }
+  },
+  {
+    "common_name": "Lavoisiera bergii",
+    "scientific_name": "Lavoisiera bergii",
+    "target_biome": "Cerrado",
+    "ph_min": 4.3,
+    "ph_max": 5.8,
+    "min_precipitation_mm_year": 850,
+    "flammability_index": 0.20,
+    "dormancy_mechanism": "not studied in the material surveyed — TODO",
+    "barrier_formation_speed": 0.50,
+    "socioeconomic_value": 0.20,
+    "source": "Thermal characterization study of Cerrado plants — ignition at 183s, TIE 246°C",
+    "values_confidence": {
+      "flammability": "based on a published study",
+      "ph_and_precipitation": "estimated",
+      "socioeconomic_value": "estimated"
+    }
+  }
+]

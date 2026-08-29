@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+
+*.db
+
+# Arquivos grandes gerados
+arquivo_unificado.csv
+enriched_hotspots.csv
+
+# Saídas geradas
+outputs/
+saidas/
+geodata/outputs/
+
+# Dados diários
+focos_diarios/

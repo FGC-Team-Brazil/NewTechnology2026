@@ -13,7 +13,7 @@ Usage:
 import argparse
 import sys
 
-import select_hotspots
+import generate_spreadsheet
 import select_hotspots
 import unify_hotspots
 
@@ -37,7 +37,7 @@ def main() -> None:
         print("\n" + "=" * 70)
         print(" STEP 2/3 — Consolidating hotspots into wildfires")
         print("=" * 70)
-        select_hotspots.main()
+        generate_spreadsheet.main()
     else:
         print("Skipping download/consolidation (--skip-download) — using existing spreadsheet.")
 

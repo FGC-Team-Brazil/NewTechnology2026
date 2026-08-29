@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
-Revivetech — Dashboard de Dados Regionais
+Revivetech — Regional Data Dashboard
 ===========================================
 
-Gera um único arquivo HTML autocontido a partir do dicionário retornado por
-`coletar_tudo()` (ver revivetech_data_collector.py), mostrando:
+Generates a single self-contained HTML file from the dictionary returned by
+`collect_all()` (see revivetech_data_collector.py), showing:
 
-  - Mapa em visão de satélite do ponto (Leaflet + Esri World Imagery, sem
-    chave de API), com raios de busca de água/vegetação/áreas protegidas
-    desenhados sobre o mapa
-  - Todos os dados coletados organizados em módulos/cartões, com estados
-    claros para dado ausente ou fonte que falhou
-  - Um pequeno gráfico das normais climatológicas mensais (Chart.js)
+  - Satellite-view map of the point (Leaflet + Esri World Imagery, no API
+    key required), with the search radii for water/vegetation/protected
+    areas drawn on the map
+  - All collected data organized into modules/cards, with clear states
+    for missing data or a source that failed
+  - A small chart of the monthly climate normals (Chart.js)
 
-Uso típico:
-    from revivetech_data_collector import coletar_tudo
-    from revivetech_dashboard import salvar_dashboard
+Typical usage:
+    from revivetech_data_collector import collect_all
+    from revivetech_dashboard import save_dashboard
 
-    dados = coletar_tudo(lat, lon)
-    caminho_html = salvar_dashboard(dados, pasta_saida="saidas")
+    data = collect_all(lat, lon)
+    html_path = save_dashboard(data, output_folder="outputs")
 
-O HTML gerado não faz nenhuma chamada de rede além de carregar os tiles do
-mapa e as fontes/bibliotecas via CDN — os dados em si já vêm embutidos no
-arquivo, então ele pode ser aberto offline (só o mapa e as fontes exigem
-internet).
+The generated HTML makes no network calls beyond loading the map tiles and
+the fonts/libraries via CDN — the data itself is already embedded in the
+file, so it can be opened offline (only the map and fonts require
+internet access).
 """
 
 from __future__ import annotations
@@ -34,17 +34,17 @@ from datetime import datetime
 from typing import Any
 
 _TEMPLATE = r"""<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Revivetech — Dossiê Regional</title>
+<title>Revivetech — Regional Dossier</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
-<script id="dados-json" type="application/json">__REVIVETECH_DADOS_JSON__</script>
+<script id="data-json" type="application/json">__REVIVETECH_DATA_JSON__</script>
 <style>
   :root{
     --bg: #12171a;
@@ -209,13 +209,13 @@ _TEMPLATE = r"""<!DOCTYPE html>
     <div class="hero-top">
       <span class="wordmark">REVIVETECH</span>
       <span>›</span>
-      <span>DOSSIÊ REGIONAL</span>
+      <span>REGIONAL DOSSIER</span>
       <span class="timestamp" id="js-timestamp"></span>
     </div>
     <div class="hero-main">
       <div class="hero-place">
-        <h1 id="js-municipio">—</h1>
-        <p id="js-estado-pais"></p>
+        <h1 id="js-municipality">—</h1>
+        <p id="js-state-country"></p>
       </div>
       <div class="hero-coords">
         <span class="coord-label">LAT / LON</span>
@@ -224,7 +224,7 @@ _TEMPLATE = r"""<!DOCTYPE html>
       <div class="biome-badge">
         <div class="biome-ring" id="js-biome-ring"></div>
         <div class="biome-text">
-          <span class="biome-label">BIOMA</span>
+          <span class="biome-label">BIOME</span>
           <span class="biome-name" id="js-biome-name">—</span>
         </div>
       </div>
@@ -249,16 +249,16 @@ _TEMPLATE = r"""<!DOCTYPE html>
   <section class="modules-grid" id="js-secondary-modules"></section>
 
   <footer class="diagnostics" id="js-diagnostics" hidden>
-    <h2>Diagnóstico da coleta</h2>
+    <h2>Collection diagnostics</h2>
     <ul id="js-diagnostics-list"></ul>
   </footer>
 
 </div>
 
 <script>
-const DADOS = JSON.parse(document.getElementById('dados-json').textContent);
+const DATA = JSON.parse(document.getElementById('data-json').textContent);
 
-const BIOMA_COR = {
+const BIOME_COLOR = {
   "Amazônia": "#2f6b4f", "Cerrado": "#c08a3e", "Mata Atlântica": "#3e8564",
   "Caatinga": "#b97a46", "Pampa": "#8a9b4e", "Pantanal": "#3e8c93"
 };
@@ -291,21 +291,21 @@ function statRow(k, v){
 
 // ---------- Header ----------
 document.getElementById('js-timestamp').textContent =
-  DADOS.data_hora_consultada ? `consulta histórica · ${DADOS.data_hora_consultada}` :
-  (DADOS.gerado_em_utc ? new Date(DADOS.gerado_em_utc).toLocaleString('pt-BR') : '');
+  DATA.queried_datetime ? `historical query · ${DATA.queried_datetime}` :
+  (DATA.generated_at_utc ? new Date(DATA.generated_at_utc).toLocaleString('en-US') : '');
 
-const loc = DADOS.localizacao || {};
-document.getElementById('js-municipio').textContent = loc.municipio || 'Localização não identificada';
-document.getElementById('js-estado-pais').textContent =
-  [loc.estado, loc.pais].filter(Boolean).join(' · ') || (DADOS.erros && DADOS.erros.localizacao ? 'fonte indisponível' : '');
+const loc = DATA.location || {};
+document.getElementById('js-municipality').textContent = loc.municipality || 'Location not identified';
+document.getElementById('js-state-country').textContent =
+  [loc.state, loc.country].filter(Boolean).join(' · ') || (DATA.errors && DATA.errors.location ? 'source unavailable' : '');
 
-const lat = DADOS.coordenadas.latitude, lon = DADOS.coordenadas.longitude;
+const lat = DATA.coordinates.latitude, lon = DATA.coordinates.longitude;
 document.getElementById('js-coords').textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 
-const bioma = (DADOS.bioma_e_vegetacao || {}).bioma;
-document.getElementById('js-biome-name').textContent = bioma || 'não configurado';
+const biome = (DATA.biome_and_vegetation || {}).biome;
+document.getElementById('js-biome-name').textContent = biome || 'not configured';
 const ring = document.getElementById('js-biome-ring');
-ring.style.background = `conic-gradient(${BIOMA_COR[bioma] || '#74a888'} 0 100%)`;
+ring.style.background = `conic-gradient(${BIOME_COLOR[biome] || '#74a888'} 0 100%)`;
 
 // ---------- Map ----------
 const map = L.map('map', {zoomControl:true, attributionControl:false}).setView([lat, lon], 13);
@@ -318,126 +318,126 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/Worl
 
 const marker = L.circleMarker([lat, lon], {
   radius: 7, color: '#d7ac5c', fillColor:'#d7ac5c', fillOpacity: 1, weight: 2
-}).addTo(map).bindPopup('Ponto consultado');
+}).addTo(map).bindPopup('Queried point');
 
-const legendaItens = [];
+const legendItems = [];
 
-function raioCirculo(raioKm, cor, label){
-  if (!raioKm) return;
+function radiusCircle(radiusKm, color, label){
+  if (!radiusKm) return;
   L.circle([lat, lon], {
-    radius: raioKm * 1000, color: cor, weight: 1.5, fillOpacity: 0.03, dashArray: '4 5'
+    radius: radiusKm * 1000, color: color, weight: 1.5, fillOpacity: 0.03, dashArray: '4 5'
   }).addTo(map);
-  legendaItens.push(`<span><i style="background:${cor}"></i>${label} (${raioKm} km)</span>`);
+  legendItems.push(`<span><i style="background:${color}"></i>${label} (${radiusKm} km)</span>`);
 }
-raioCirculo((DADOS.areas_protegidas_proximas || []).length ? 15 : null, '#74a888', 'busca UCs');
-raioCirculo(10, '#5f93aa', 'busca água');
-raioCirculo(10, '#c1603e', 'busca vegetação nativa');
+radiusCircle((DATA.nearby_protected_areas || []).length ? 15 : null, '#74a888', 'protected area search');
+radiusCircle(10, '#5f93aa', 'water search');
+radiusCircle(10, '#c1603e', 'native vegetation search');
 
-const agua = (DADOS.distancia_agua || {}).corpo_dagua_mais_proximo;
-if (agua) legendaItens.push(`<span><i style="background:#5f93aa"></i>água a ${agua.distancia_km} km</span>`);
-const vegNativa = (DADOS.distancia_vegetacao_nativa || {}).fragmento_vegetacao_mais_proximo;
-if (vegNativa) legendaItens.push(`<span><i style="background:#c1603e"></i>mata a ${vegNativa.distancia_km} km</span>`);
+const water = (DATA.water_distance || {}).nearest_water_body;
+if (water) legendItems.push(`<span><i style="background:#5f93aa"></i>water at ${water.distance_km} km</span>`);
+const nativeVeg = (DATA.native_vegetation_distance || {}).nearest_vegetation_fragment;
+if (nativeVeg) legendItems.push(`<span><i style="background:#c1603e"></i>forest at ${nativeVeg.distance_km} km</span>`);
 
-document.getElementById('js-map-legend').innerHTML = legendaItens.join('');
+document.getElementById('js-map-legend').innerHTML = legendItems.join('');
 
 // ---------- Priority modules ----------
 const priority = document.getElementById('js-priority-modules');
 
-// Clima
+// Weather
 (function(){
-  const historico = DADOS.data_hora_consultada;
-  const clima = historico ? (DADOS.clima_historico || {}) : (DADOS.clima_atual_e_previsao || {}).condicoes_atuais || {};
-  const indisponivel = DADOS.erros && (DADOS.erros.clima_atual_e_previsao || DADOS.erros.clima_historico);
+  const historical = DATA.queried_datetime;
+  const weather = historical ? (DATA.historical_weather || {}) : (DATA.current_weather_and_forecast || {}).current_conditions || {};
+  const unavailable = DATA.errors && (DATA.errors.current_weather_and_forecast || DATA.errors.historical_weather);
   priority.appendChild(card({
-    eyebrow: historico ? 'Clima · histórico' : 'Clima · agora',
-    title: 'Condições atmosféricas',
-    unavailable: !!indisponivel,
-    body: indisponivel ? '<p class="sub">Fonte indisponível nesta coleta.</p>' : `
-      <div class="big-stat">${fmt(clima.temperatura_c, ' °C')}</div>
-      ${statRow('Umidade relativa', fmt(clima.umidade_relativa_pct, ' %'))}
-      ${statRow('Precipitação', fmt(clima.precipitacao_mm, ' mm'))}
-      ${statRow('Vento', fmt(clima.vento_kmh, ' km/h'))}
-      ${statRow('Pressão', fmt(clima.pressao_superficie_hpa || clima.pressao_hpa, ' hPa'))}
+    eyebrow: historical ? 'Weather · historical' : 'Weather · now',
+    title: 'Atmospheric conditions',
+    unavailable: !!unavailable,
+    body: unavailable ? '<p class="sub">Source unavailable in this collection.</p>' : `
+      <div class="big-stat">${fmt(weather.temperature_c, ' °C')}</div>
+      ${statRow('Relative humidity', fmt(weather.relative_humidity_pct, ' %'))}
+      ${statRow('Precipitation', fmt(weather.precipitation_mm, ' mm'))}
+      ${statRow('Wind', fmt(weather.wind_kmh, ' km/h'))}
+      ${statRow('Pressure', fmt(weather.surface_pressure_hpa || weather.pressure_hpa, ' hPa'))}
     `
   }));
 })();
 
-// Relevo
+// Relief
 (function(){
-  const d = DADOS.declividade_relevo || {};
-  const indisponivel = DADOS.erros && DADOS.erros.declividade_relevo;
+  const d = DATA.slope_relief || {};
+  const unavailable = DATA.errors && DATA.errors.slope_relief;
   priority.appendChild(card({
-    eyebrow: 'Relevo',
-    title: 'Declividade estimada',
-    unavailable: !!indisponivel,
-    body: indisponivel ? '<p class="sub">Fonte indisponível nesta coleta.</p>' : `
-      <div class="big-stat">${fmt(d.declividade_pct_estimada, ' %')}</div>
-      ${statRow('Classificação', fmt(d.classificacao_relevo))}
-      ${statRow('Elevação', fmt((DADOS.elevacao_e_fuso||{}).elevacao_m, ' m'))}
+    eyebrow: 'Relief',
+    title: 'Estimated slope',
+    unavailable: !!unavailable,
+    body: unavailable ? '<p class="sub">Source unavailable in this collection.</p>' : `
+      <div class="big-stat">${fmt(d.estimated_slope_pct, ' %')}</div>
+      ${statRow('Classification', fmt(d.relief_classification))}
+      ${statRow('Elevation', fmt((DATA.elevation_and_timezone||{}).elevation_m, ' m'))}
     `,
-    note: d.observacao || null
+    note: d.note || null
   }));
 })();
 
-// Bioma e vegetação
+// Biome and vegetation
 (function(){
-  const b = DADOS.bioma_e_vegetacao || {};
-  const indisponivel = DADOS.erros && DADOS.erros.bioma_e_vegetacao;
+  const b = DATA.biome_and_vegetation || {};
+  const unavailable = DATA.errors && DATA.errors.biome_and_vegetation;
   priority.appendChild(card({
-    eyebrow: 'Bioma & vegetação',
-    title: 'Cobertura original',
-    unavailable: !!indisponivel || !b.bioma,
-    body: (indisponivel || !b.bioma) ? '<p class="sub">Requer GeoJSON de biomas configurado (ver --biomas-geojson).</p>' : `
-      ${statRow('Bioma', b.bioma)}
-      ${statRow('Vegetação original', fmt(b.vegetacao_original))}
+    eyebrow: 'Biome & vegetation',
+    title: 'Original cover',
+    unavailable: !!unavailable || !b.biome,
+    body: (unavailable || !b.biome) ? '<p class="sub">Requires a configured biomes GeoJSON (see --biomes-geojson).</p>' : `
+      ${statRow('Biome', b.biome)}
+      ${statRow('Original vegetation', fmt(b.original_vegetation))}
     `
   }));
 })();
 
-// Uso do solo + risco de erosão (mesmo cartão, ambos "avançados")
+// Land use + erosion risk (same card, both "advanced")
 (function(){
-  const uso = DADOS.uso_do_solo || {};
-  const erosao = DADOS.risco_erosao || {};
+  const use = DATA.land_use || {};
+  const erosion = DATA.erosion_risk || {};
   priority.appendChild(card({
-    eyebrow: 'Solo · uso & risco',
-    title: 'Uso atual e erosão',
-    unavailable: !uso.uso_do_solo && !erosao.classe_risco_erosao,
+    eyebrow: 'Soil · use & risk',
+    title: 'Current use and erosion',
+    unavailable: !use.land_use && !erosion.erosion_risk_class,
     body: `
-      ${statRow('Uso do solo', fmt(uso.uso_do_solo || uso.codigo_classe_mapbiomas))}
-      ${statRow('Risco de erosão', fmt(erosao.classe_risco_erosao))}
+      ${statRow('Land use', fmt(use.land_use || use.mapbiomas_class_code))}
+      ${statRow('Erosion risk', fmt(erosion.erosion_risk_class))}
     `,
-    note: (uso.observacao || erosao.observacao || null)
+    note: (use.note || erosion.note || null)
   }));
 })();
 
-// Água e vegetação nativa próximas
+// Nearby water and native vegetation
 (function(){
-  const agua = (DADOS.distancia_agua || {}).corpo_dagua_mais_proximo;
-  const veg = (DADOS.distancia_vegetacao_nativa || {}).fragmento_vegetacao_mais_proximo;
+  const water = (DATA.water_distance || {}).nearest_water_body;
+  const veg = (DATA.native_vegetation_distance || {}).nearest_vegetation_fragment;
   priority.appendChild(card({
-    eyebrow: 'Proximidade ecológica',
-    title: 'Água & vegetação nativa',
-    unavailable: !agua && !veg,
+    eyebrow: 'Ecological proximity',
+    title: 'Water & native vegetation',
+    unavailable: !water && !veg,
     body: `
-      ${statRow('Água mais próxima', agua ? `${agua.nome} · ${agua.distancia_km} km` : 'nenhuma no raio')}
-      ${statRow('Vegetação nativa', veg ? `${veg.nome} · ${veg.distancia_km} km` : 'nenhuma no raio')}
+      ${statRow('Nearest water', water ? `${water.name} · ${water.distance_km} km` : 'none in radius')}
+      ${statRow('Native vegetation', veg ? `${veg.name} · ${veg.distance_km} km` : 'none in radius')}
     `
   }));
 })();
 
-// Histórico de queimadas
+// Wildfire history
 (function(){
-  const q = DADOS.historico_queimadas_local || {};
-  const indisponivel = DADOS.erros && DADOS.erros.historico_queimadas_local;
-  const anos = (q.anos_com_registro || []).map(a => `<span class="chip ember">${a}</span>`).join('');
+  const q = DATA.local_fire_history || {};
+  const unavailable = DATA.errors && DATA.errors.local_fire_history;
+  const years = (q.years_with_records || []).map(a => `<span class="chip ember">${a}</span>`).join('');
   priority.appendChild(card({
-    eyebrow: 'Histórico local (INPE)',
-    title: 'Recorrência de queimadas',
-    unavailable: !!indisponivel,
-    body: indisponivel ? '<p class="sub">Banco da Fase 1 não configurado (ver --banco-queimadas).</p>' : `
-      <div class="big-stat">${fmt(q.total_focos_no_raio)}</div>
-      <p class="sub">focos registrados em raio de ${fmt(q.raio_consultado_km, ' km')}</p>
-      <div style="margin-top:8px;">${anos || '<span class="sub">nenhum ano com registro</span>'}</div>
+    eyebrow: 'Local history (INPE)',
+    title: 'Wildfire recurrence',
+    unavailable: !!unavailable,
+    body: unavailable ? '<p class="sub">Phase 1 database not configured (see --wildfire-db).</p>' : `
+      <div class="big-stat">${fmt(q.total_hotspots_in_radius)}</div>
+      <p class="sub">hotspots recorded within a ${fmt(q.queried_radius_km, ' km')} radius</p>
+      <div style="margin-top:8px;">${years || '<span class="sub">no years with records</span>'}</div>
     `
   }));
 })();
@@ -445,42 +445,42 @@ const priority = document.getElementById('js-priority-modules');
 // ---------- Secondary modules ----------
 const secondary = document.getElementById('js-secondary-modules');
 
-// Qualidade do ar
+// Air quality
 (function(){
-  const ar = DADOS.qualidade_do_ar || {};
-  const indisponivel = DADOS.erros && DADOS.erros.qualidade_do_ar;
+  const air = DATA.air_quality || {};
+  const unavailable = DATA.errors && DATA.errors.air_quality;
   secondary.appendChild(card({
-    eyebrow: 'Ar', title: 'Qualidade do ar',
-    unavailable: !!indisponivel,
-    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' : `
-      ${statRow('PM2.5', fmt(ar.pm2_5, ' µg/m³'))}
-      ${statRow('PM10', fmt(ar.pm10, ' µg/m³'))}
-      ${statRow('Ozônio', fmt(ar.ozonio, ' µg/m³'))}
-      ${statRow('Índice europeu (AQI)', fmt(ar.indice_qualidade_ar_europeu))}
+    eyebrow: 'Air', title: 'Air quality',
+    unavailable: !!unavailable,
+    body: unavailable ? '<p class="sub">Source unavailable.</p>' : `
+      ${statRow('PM2.5', fmt(air.pm2_5, ' µg/m³'))}
+      ${statRow('PM10', fmt(air.pm10, ' µg/m³'))}
+      ${statRow('Ozone', fmt(air.ozone, ' µg/m³'))}
+      ${statRow('European index (AQI)', fmt(air.european_air_quality_index))}
     `
   }));
 })();
 
-// Normais climatológicas (gráfico)
+// Climate normals (chart)
 (function(){
-  const normais = DADOS.normais_climatologicas || {};
-  const indisponivel = DADOS.erros && DADOS.erros.normais_climatologicas;
+  const normals = DATA.climate_normals || {};
+  const unavailable = DATA.errors && DATA.errors.climate_normals;
   const c = card({
-    eyebrow: 'NASA POWER · 1991–2020', title: 'Normais climatológicas',
-    unavailable: !!indisponivel,
-    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' : `<div class="chart-wrap"><canvas id="js-chart-normais"></canvas></div>`
+    eyebrow: 'NASA POWER · 1991–2020', title: 'Climate normals',
+    unavailable: !!unavailable,
+    body: unavailable ? '<p class="sub">Source unavailable.</p>' : `<div class="chart-wrap"><canvas id="js-chart-normals"></canvas></div>`
   });
   secondary.appendChild(c);
-  if (!indisponivel && normais.por_mes){
-    const meses = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-    const temp = meses.map(m => (normais.por_mes[m]||{}).temp_media_c);
-    const precip = meses.map(m => (normais.por_mes[m]||{}).precipitacao_mm_dia);
-    new Chart(document.getElementById('js-chart-normais'), {
+  if (!unavailable && normals.by_month){
+    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    const temp = months.map(m => (normals.by_month[m]||{}).avg_temp_c);
+    const precip = months.map(m => (normals.by_month[m]||{}).precipitation_mm_day);
+    new Chart(document.getElementById('js-chart-normals'), {
       data: {
-        labels: meses,
+        labels: months,
         datasets: [
-          {type:'bar', label:'Precipitação (mm/dia)', data: precip, backgroundColor:'rgba(95,147,170,0.55)', yAxisID:'y1', borderRadius:3},
-          {type:'line', label:'Temp. média (°C)', data: temp, borderColor:'#d7ac5c', backgroundColor:'#d7ac5c', yAxisID:'y2', tension:.35, pointRadius:2}
+          {type:'bar', label:'Precipitation (mm/day)', data: precip, backgroundColor:'rgba(95,147,170,0.55)', yAxisID:'y1', borderRadius:3},
+          {type:'line', label:'Avg. temp (°C)', data: temp, borderColor:'#d7ac5c', backgroundColor:'#d7ac5c', yAxisID:'y2', tension:.35, pointRadius:2}
         ]
       },
       options: {
@@ -496,47 +496,47 @@ const secondary = document.getElementById('js-secondary-modules');
   }
 })();
 
-// Áreas protegidas
+// Protected areas
 (function(){
-  const areas = DADOS.areas_protegidas_proximas || [];
-  const indisponivel = DADOS.erros && DADOS.erros.areas_protegidas_proximas;
-  const itens = areas.slice(0,6).map(a =>
-    `<li><span>${a.nome}</span><span class="v" style="font-family:'IBM Plex Mono',monospace;">${fmt(a.distancia_aproximada_km,' km')}</span></li>`
+  const areas = DATA.nearby_protected_areas || [];
+  const unavailable = DATA.errors && DATA.errors.nearby_protected_areas;
+  const items = areas.slice(0,6).map(a =>
+    `<li><span>${a.name}</span><span class="v" style="font-family:'IBM Plex Mono',monospace;">${fmt(a.approximate_distance_km,' km')}</span></li>`
   ).join('');
   secondary.appendChild(card({
-    eyebrow: 'OSM / CNUC', title: 'Áreas protegidas próximas',
-    unavailable: !!indisponivel || areas.length === 0,
-    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' :
-      (areas.length ? `<ul class="protected-list">${itens}</ul>` : '<p class="sub">Nenhuma encontrada no raio consultado.</p>')
+    eyebrow: 'OSM / CNUC', title: 'Nearby protected areas',
+    unavailable: !!unavailable || areas.length === 0,
+    body: unavailable ? '<p class="sub">Source unavailable.</p>' :
+      (areas.length ? `<ul class="protected-list">${items}</ul>` : '<p class="sub">None found in the queried radius.</p>')
   }));
 })();
 
-// Solo
+// Soil
 (function(){
-  const solo = DADOS.solo || {};
-  const indisponivel = DADOS.erros && DADOS.erros.solo;
-  const linhas = Object.entries(solo).map(([prop, info]) => `
-    <tr><td>${prop}</td><td>${fmt((info.valores||{})['0-5cm'])}</td><td>${fmt((info.valores||{})['5-15cm'])}</td><td style="color:#8ea298;">${info.unidade||''}</td></tr>
+  const soil = DATA.soil || {};
+  const unavailable = DATA.errors && DATA.errors.soil;
+  const rows = Object.entries(soil).map(([prop, info]) => `
+    <tr><td>${prop}</td><td>${fmt((info.values||{})['0-5cm'])}</td><td>${fmt((info.values||{})['5-15cm'])}</td><td style="color:#8ea298;">${info.unit||''}</td></tr>
   `).join('');
   secondary.appendChild(card({
-    eyebrow: 'SoilGrids / ISRIC', title: 'Solo (propriedades físico-químicas)',
-    unavailable: !!indisponivel,
-    body: indisponivel ? '<p class="sub">Fonte indisponível.</p>' : `
+    eyebrow: 'SoilGrids / ISRIC', title: 'Soil (physical-chemical properties)',
+    unavailable: !!unavailable,
+    body: unavailable ? '<p class="sub">Source unavailable.</p>' : `
       <table class="soil-table">
-        <tr><th>Propriedade</th><th>0–5cm</th><th>5–15cm</th><th>Unidade</th></tr>
-        ${linhas}
+        <tr><th>Property</th><th>0–5cm</th><th>5–15cm</th><th>Unit</th></tr>
+        ${rows}
       </table>
     `
   }));
 })();
 
 // ---------- Diagnostics ----------
-const erros = DADOS.erros || {};
-if (Object.keys(erros).length){
+const errors = DATA.errors || {};
+if (Object.keys(errors).length){
   document.getElementById('js-diagnostics').hidden = false;
-  const lista = document.getElementById('js-diagnostics-list');
-  Object.entries(erros).forEach(([fonte, msg]) => {
-    lista.appendChild(el('li', null, `<code>${fonte}</code> — ${msg}`));
+  const list = document.getElementById('js-diagnostics-list');
+  Object.entries(errors).forEach(([source, msg]) => {
+    list.appendChild(el('li', null, `<code>${source}</code> — ${msg}`));
   });
 }
 </script>
@@ -545,22 +545,22 @@ if (Object.keys(erros).length){
 """
 
 
-def gerar_dashboard_html(dados: dict) -> str:
+def generate_dashboard_html(data: dict) -> str:
     """
-    Recebe o dicionário retornado por `coletar_tudo()` e retorna o HTML
-    completo da dashboard, já com os dados embutidos.
+    Receives the dictionary returned by `collect_all()` and returns the
+    full dashboard HTML, with the data already embedded.
     """
-    dados_json = json.dumps(dados, ensure_ascii=False).replace("</", "<\\/")
-    return _TEMPLATE.replace("__REVIVETECH_DADOS_JSON__", dados_json)
+    data_json = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    return _TEMPLATE.replace("__REVIVETECH_DATA_JSON__", data_json)
 
 
-def salvar_dashboard(dados: dict, pasta_saida: str = "saidas") -> str:
-    """Gera e salva o HTML da dashboard, retornando o caminho do arquivo."""
-    os.makedirs(pasta_saida, exist_ok=True)
-    lat = dados["coordenadas"]["latitude"]
-    lon = dados["coordenadas"]["longitude"]
-    carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
-    caminho = os.path.join(pasta_saida, f"dashboard_{lat}_{lon}_{carimbo}.html")
-    with open(caminho, "w", encoding="utf-8") as f:
-        f.write(gerar_dashboard_html(dados))
-    return caminho
+def save_dashboard(data: dict, output_folder: str = "outputs") -> str:
+    """Generates and saves the dashboard HTML, returning the file path."""
+    os.makedirs(output_folder, exist_ok=True)
+    lat = data["coordinates"]["latitude"]
+    lon = data["coordinates"]["longitude"]
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(output_folder, f"dashboard_{lat}_{lon}_{stamp}.html")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(generate_dashboard_html(data))
+    return path
