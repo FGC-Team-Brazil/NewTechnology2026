@@ -47,6 +47,7 @@ console = Console() if _RICH else None
 # Biomas disponíveis (ID interno → label de exibição)
 # ---------------------------------------------------------------------------
 BIOMES: dict[str, str] = {
+    "all":           "Todos os biomas",
     "cerrado":       "Cerrado",
     "amazonia":      "Amazônia",
     "caatinga":      "Caatinga",
@@ -162,6 +163,8 @@ def ask_days() -> int:
 # 3. Exibição e seleção de foco
 # ---------------------------------------------------------------------------
 
+MUNICIPALITY_SELECTION_THRESHOLD = 60
+
 def _clean(value, empty: str = "—") -> str:
     text = str(value) if value is not None else ""
     return empty if text.strip().lower() in ("nan", "none", "") else text
@@ -208,12 +211,96 @@ def show_hotspot_list(df: pd.DataFrame, biome_label: str) -> None:
             print(f"... e mais {len(df) - 30} focos")
 
 
+def _municipality_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Resume incêndios por município para evitar uma lista inicial enorme."""
+    working = df.copy()
+    working["_municipio_exibicao"] = working["municipio"].map(_clean)
+    working["_municipio_chave"] = working["_municipio_exibicao"].map(_remove_accents)
+    return (
+        working.groupby(["_municipio_exibicao", "_municipio_chave"], dropna=False)
+        .agg(incendios=("qtd_focos", "size"), focos=("qtd_focos", "sum"))
+        .sort_values(["focos", "incendios"], ascending=False)
+        .reset_index()
+    )
+
+
+def _show_municipality_list(summary: pd.DataFrame, biome_label: str) -> None:
+    """Mostra uma lista compacta de municípios antes da lista de incêndios."""
+    if _RICH:
+        table = Table(
+            title=f"Municípios com focos — {biome_label}",
+            box=box.ROUNDED,
+            show_lines=False,
+        )
+        table.add_column("#", style="bold cyan", justify="right", width=5)
+        table.add_column("Município", width=32)
+        table.add_column("Incêndios", justify="right", width=11)
+        table.add_column("Focos", justify="right", width=10)
+        for index, row in summary.head(20).iterrows():
+            table.add_row(str(index), str(row["_municipio_exibicao"])[:31], str(int(row["incendios"])), str(int(row["focos"])))
+        console.print(table)
+        if len(summary) > 20:
+            console.print(f"[dim]... e mais {len(summary) - 20} municípios (digite o nome para buscar)[/dim]")
+    else:
+        print(f"\n{'#':>4}  {'Município':<32} {'Incêndios':>11} {'Focos':>10}")
+        print("-" * 65)
+        for index, row in summary.head(20).iterrows():
+            print(f"{index:>4}  {str(row['_municipio_exibicao'])[:31]:<32} {int(row['incendios']):>11} {int(row['focos']):>10}")
+        if len(summary) > 20:
+            print(f"... e mais {len(summary) - 20} municípios")
+
+
+def _select_municipality(df: pd.DataFrame, biome_label: str) -> Optional[str]:
+    """Retorna a chave normalizada do município escolhido pelo usuário."""
+    summary = _municipality_summary(df)
+    while True:
+        _show_municipality_list(summary, biome_label)
+        prompt = "Digite o número ou nome do município; 'sair' para cancelar: "
+        user_input = Prompt.ask(">", default="").strip() if _RICH else _plain_input(prompt)
+        if user_input.lower() in ("exit", "quit", "q", "sair"):
+            return None
+        if user_input.isdigit():
+            index = int(user_input)
+            if index in summary.index:
+                return str(summary.loc[index, "_municipio_chave"])
+            _warn("Número inválido — escolha um município exibido.")
+            continue
+        if user_input:
+            term = _remove_accents(user_input)
+            matches = summary[
+                summary["_municipio_chave"].str.contains(term, regex=False, na=False)
+            ]
+            if len(matches) == 1:
+                return str(matches.iloc[0]["_municipio_chave"])
+            if matches.empty:
+                _warn(f"Nenhum município encontrado para '{user_input}'.")
+            else:
+                _warn("Há mais de um município correspondente; refine a busca ou use o número.")
+        else:
+            _warn("Digite o nome ou o número de um município.")
+
+
 def select_hotspot(df: pd.DataFrame, biome_label: str) -> Optional[pd.Series]:
     """
-    Loop interativo: exibe lista, aceita número, busca ou 'exit'.
+    Loop interativo: para listas extensas, seleciona município antes do foco.
+    Depois exibe lista, aceita número, busca ou 'exit'.
     Retorna a linha (pd.Series) do foco selecionado, ou None se o usuário sair.
     """
-    df_current = df.copy()
+    df_base = df.copy().reset_index(drop=True)
+    if len(df_base) > MUNICIPALITY_SELECTION_THRESHOLD:
+        municipality_key = _select_municipality(df_base, biome_label)
+        if municipality_key is None:
+            return None
+        df_base = df_base[
+            df_base["municipio"].map(_remove_accents) == municipality_key
+        ].reset_index(drop=True)
+        if df_base.empty:
+            _warn("Não há focos disponíveis para o município escolhido.")
+            return None
+        municipality_label = _clean(df_base.iloc[0].get("municipio"))
+        biome_label = f"{biome_label} — {municipality_label}"
+
+    df_current = df_base.copy()
 
     while True:
         show_hotspot_list(df_current, biome_label)
@@ -236,7 +323,7 @@ def select_hotspot(df: pd.DataFrame, biome_label: str) -> Optional[pd.Series]:
             return None
 
         if user_input.lower() in ("limpar", "clear"):
-            df_current = df.copy()
+            df_current = df_base.copy()
             continue
 
         if user_input.isdigit():
@@ -248,17 +335,16 @@ def select_hotspot(df: pd.DataFrame, biome_label: str) -> Optional[pd.Series]:
 
         if user_input:
             term = _remove_accents(user_input)
-            filtered = df[
-                df["municipio"].astype(str).apply(_remove_accents).str.contains(term, na=False)
-                | df["data_pura"].astype(str).str.contains(user_input, na=False)
+            filtered = df_base[
+                df_base["municipio"].astype(str).apply(_remove_accents).str.contains(term, regex=False, na=False)
+                | df_base["data_pura"].astype(str).str.contains(user_input, regex=False, na=False)
             ].reset_index(drop=True)
             if filtered.empty:
-                _warn(f"Nenhum foco encontrado para '{user_input}'. Exibindo todos.")
-                df_current = df.copy()
+                _warn(f"Nenhum foco encontrado para '{user_input}'. A lista atual foi mantida.")
             else:
                 df_current = filtered
         else:
-            df_current = df.copy()
+            df_current = df_base.copy()
 
 
 # ---------------------------------------------------------------------------

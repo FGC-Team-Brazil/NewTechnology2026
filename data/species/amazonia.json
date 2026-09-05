@@ -1,17 +1,7 @@
 [
-  {
-    "_comment": "TODO — Adicionar espécies nativas da Amazônia. Schema idêntico ao cerrado.json.",
-    "common_name": "TODO",
-    "scientific_name": "TODO",
-    "target_biome": "Amazônia",
-    "ph_min": null,
-    "ph_max": null,
-    "min_precipitation_mm_year": null,
-    "flammability_index": null,
-    "dormancy_mechanism": "TODO",
-    "barrier_formation_speed": null,
-    "socioeconomic_value": null,
-    "source": "TODO",
-    "values_confidence": {}
-  }
+  {"common_name":"Açaí","scientific_name":"Euterpe oleracea","target_biome":"Amazônia","ph_min":4.5,"ph_max":6.0,"min_precipitation_mm_year":2000,"flammability_index":0.25,"dormancy_mechanism":"none","barrier_formation_speed":0.5,"socioeconomic_value":0.9,"source":"Lorenzi et al. 2002, flora da Amazônia","values_confidence":{"ph":"medium","precipitation":"high","flammability":"medium","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"high"}},
+  {"common_name":"Buriti","scientific_name":"Mauritia flexuosa","target_biome":"Amazônia","ph_min":4.0,"ph_max":6.0,"min_precipitation_mm_year":1500,"flammability_index":0.25,"dormancy_mechanism":"none","barrier_formation_speed":0.5,"socioeconomic_value":0.8,"source":"Flora Amazoniana, Silva 1995","values_confidence":{"ph":"medium","precipitation":"medium","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"medium"}},
+  {"common_name":"Ingá","scientific_name":"Inga edulis","target_biome":"Amazônia","ph_min":5.0,"ph_max":6.5,"min_precipitation_mm_year":1200,"flammability_index":0.25,"dormancy_mechanism":"none","barrier_formation_speed":0.7,"socioeconomic_value":0.8,"source":"Lorenzi 2002, Espécies frutíferas da Amazônia","values_confidence":{"ph":"medium","precipitation":"high","flammability":"medium","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"high"}},
+  {"common_name":"Bacuri-do-Pantanal","scientific_name":"Attalea phalerata","target_biome":"Amazônia","ph_min":5.0,"ph_max":6.5,"min_precipitation_mm_year":1200,"flammability_index":0.25,"dormancy_mechanism":"none","barrier_formation_speed":0.5,"socioeconomic_value":0.8,"source":"Silva 2010, Palmeras del Paraguay","values_confidence":{"ph":"medium","precipitation":"medium","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"medium"}},
+  {"common_name":"Bacuri-do-Campo","scientific_name":"Bactris major","target_biome":"Amazônia","ph_min":5.0,"ph_max":6.5,"min_precipitation_mm_year":1500,"flammability_index":0.3,"dormancy_mechanism":"none","barrier_formation_speed":0.4,"socioeconomic_value":0.5,"source":"Flora da Amazônia, Lorenzi 2002","values_confidence":{"ph":"medium","precipitation":"high","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"medium"}}
 ]

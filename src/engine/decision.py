@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 src/engine/decision.py
 =======================
@@ -45,7 +45,7 @@ BIOCHAR_CURVE_T_HA: dict[str, list[tuple[float, float]]] = {
 }
 
 HYDROGEL_BASE_G: float = 2.0
-HYDROGEL_MAX_G:  float = 6.0
+HYDROGEL_MAX_G:  float = 10.0
 
 
 # --------------------------------------------------------------------------
@@ -80,8 +80,33 @@ def load_species(
     with open(target, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Filtra entradas esqueleto (TODO) de biomas ainda não preenchidos
-    return [s for s in data if s.get("common_name") != "TODO"]
+    valid_species = []
+    for s in data:
+        if s.get("common_name") == "TODO":
+            continue
+            
+        status = s.get("status", "eligible")
+        if status not in ("eligible", "trial_candidate"):
+            continue
+            
+        try:
+            for field in ["ph_min", "ph_max", "min_precipitation_mm_year", "barrier_formation_speed", "socioeconomic_value"]:
+                val = s.get(field)
+                if not isinstance(val, (int, float)):
+                    raise ValueError(f"Campo numérico '{field}' inválido ou nulo")
+            
+            flam = s.get("flammability_index")
+            if not isinstance(flam, (int, float)) or not (0.0 <= flam <= 1.0):
+                raise ValueError("flammability_index fora de [0, 1] ou nulo")
+                
+            valid_species.append(s)
+        except ValueError as e:
+            print(f"Aviso: ignorando espécie '{s.get('common_name')}' devido a erro de validação: {e}")
+
+    if not valid_species and data:
+        print("Aviso: base de espécies deste bioma ainda não cadastrada (apenas TODOs) ou sem espécies válidas.")
+
+    return valid_species
 
 
 # --------------------------------------------------------------------------
@@ -93,6 +118,11 @@ def _extract_ph(region_data: dict) -> Optional[float]:
     return phh2o.get("0-5cm")
 
 
+def _extract_soil_property(region_data: dict, prop: str) -> Optional[float]:
+    prop_data = region_data.get("soil", {}).get(prop, {}).get("values", {})
+    return prop_data.get("0-5cm")
+
+
 def _extract_annual_precipitation_mm(region_data: dict) -> Optional[float]:
     normals = region_data.get("climate_normals", {}).get("annual_average", {})
     mm_day  = normals.get("precipitation_mm_day")
@@ -100,10 +130,18 @@ def _extract_annual_precipitation_mm(region_data: dict) -> Optional[float]:
 
 
 def _biome_compatible(species: dict, region_data: dict) -> bool:
-    """
-    TODO: integrar comparação de bioma quando MapBiomas/Earth Engine
-    estiver no pipeline. Por enquanto aceita qualquer região.
-    """
+    target_biome = species.get("target_biome", "").lower()
+    region_biome = region_data.get("biome_and_vegetation", {}).get("biome", "").lower()
+    
+    import unicodedata
+    def clean(s):
+        return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)).strip()
+        
+    target_biome = clean(target_biome)
+    region_biome = clean(region_biome)
+    
+    if target_biome and region_biome:
+        return target_biome in region_biome or region_biome in target_biome
     return True
 
 
@@ -120,6 +158,18 @@ def _score_range(value: float, minimum: float, maximum: float) -> float:
     return max(0.0, 1.0 - distance / slack)
 
 
+def _score_water(precipitation: float, min_precip: float) -> float:
+    max_precip = min_precip + 1000.0
+    if precipitation < min_precip:
+        return max(0.0, precipitation / min_precip)
+    elif precipitation <= max_precip:
+        return 1.0
+    else:
+        slack = 1000.0
+        distance = precipitation - max_precip
+        return max(0.0, 1.0 - (distance / slack))
+
+
 def score_species(species: dict, region_data: dict) -> dict:
     """Pontua uma espécie (0–1) contra os dados regionais enriquecidos."""
     soil_ph       = _extract_ph(region_data)
@@ -131,7 +181,7 @@ def score_species(species: dict, region_data: dict) -> dict:
         if soil_ph is not None else 0.5
     )
     water_score = (
-        min(1.0, precipitation / species["min_precipitation_mm_year"])
+        _score_water(precipitation, species["min_precipitation_mm_year"])
         if precipitation is not None else 0.5
     )
     flammability_score = 1.0 - species["flammability_index"]
@@ -165,14 +215,57 @@ def rank_species(region_data: dict, species_list: list[dict], top_n: int = 3) ->
 
 
 # --------------------------------------------------------------------------
-# 4. Dosagem de biochar (curva dose-resposta da literatura)
+# 4. Dosagem de biochar — base empírica (% do recheio da cápsula)
 # --------------------------------------------------------------------------
+#
+# Referência: revestimento de sementes de arroz com biochar (Liu et al.):
+#   - ponto ótimo = 30 % do peso do material de revestimento
+#   - acima disso o excesso de pH alcalino prejudica germinação
+#
+# Implementação: usamos o *gap de pH* medido pelo motor (quanto falta para
+# atingir o pH alvo da espécie) como acionador proporcional.
+#   - gap ≥ BIOCHAR_PH_GAP_MAX (2 unidades) → 30 % do recheio = teto empírico
+#   - gap = 0 (solo já adequado)             → 0 %
+#   - entre esses extremos: interpolação linear
+#
+# O teto de 30 % é aplicado sobre CAPSULE_FILL_G (peso estimado do recheio
+# de uma cápsula de 4 cm de diâmetro com substrato orgânico de ~0,6 g/cm³).
 
+CAPSULE_FILL_G: float = 15.0       # g — recheio estimado da biocápsula (4 cm Ø)
+BIOCHAR_MAX_PCT: float = 0.30      # 30 % → ótimo empírico (Liu et al.)
+BIOCHAR_PH_GAP_MAX: float = 2.0   # gap de pH que dispara o teto de biochar
+
+
+def calculate_biochar_dose_g(
+    current_ph: Optional[float],
+    target_ph: float,
+) -> float:
+    """
+    Retorna a massa de biochar (g) para incorporar no recheio da cápsula.
+
+    Parameters
+    ----------
+    current_ph  : pH medido no ponto (SoilGrids / coletor regional)
+    target_ph   : pH alvo = média entre ph_min e ph_max da espécie
+
+    Returns
+    -------
+    float em gramas, no intervalo [0, CAPSULE_FILL_G * BIOCHAR_MAX_PCT] (máx ≈ 4.5 g)
+    """
+    if current_ph is None or current_ph >= target_ph:
+        return 0.0
+    ph_gap = min(target_ph - current_ph, BIOCHAR_PH_GAP_MAX)
+    pct    = (ph_gap / BIOCHAR_PH_GAP_MAX) * BIOCHAR_MAX_PCT
+    return round(pct * CAPSULE_FILL_G, 2)
+
+
+# Mantida para compatibilidade com motor_ai.py que pode chamar as funções antigas
 def calculate_biochar_dose_t_ha(
     current_ph: float,
     target_ph: float,
     soil_type: str = "yellow_latosol",
 ) -> float:
+    """Legado — preferir calculate_biochar_dose_g() para uso na biocápsula."""
     points = BIOCHAR_CURVE_T_HA.get(soil_type, BIOCHAR_CURVE_T_HA["yellow_latosol"])
     (ph1, d1), (ph2, d2) = points
     if current_ph >= target_ph:
@@ -183,25 +276,56 @@ def calculate_biochar_dose_t_ha(
 
 
 def biochar_dose_per_capsule_g(dose_t_ha: float, capsules_per_m2: float) -> float:
-    if capsules_per_m2 <= 0:
+    """Legado — mantido para compatibilidade. Não é chamado pelo fluxo principal."""
+    if dose_t_ha <= 0:
         return 0.0
-    grams_per_m2 = (dose_t_ha * 1_000_000) / 10_000
-    return round(grams_per_m2 / capsules_per_m2, 2)
+    area_influencia_m2 = 0.01
+    grams_per_m2 = dose_t_ha * 100.0
+    return min(round(grams_per_m2 * area_influencia_m2, 2), 25.0)
 
 
 # --------------------------------------------------------------------------
-# 5. Dosagem de hidrogel (heurística de déficit hídrico)
+# 5. Dosagem de hidrogel — base empírica (% do recheio da cápsula)
 # --------------------------------------------------------------------------
+#
+# Referência: cápsulas dispersadas por drone para restauração de floresta
+# tropical (Hicks et al.): hidrogel usado = 0,05 g em 3,56 g de substrato
+# ≈ 1,4 % do recheio.
+# Teto seguro recomendado: 2–3 % — acima disso o microambiente fica saturado
+# e cria condições anaeróbicas que impedem a germinação.
+#
+# Implementação: usamos o *déficit relativo de precipitação* já disponível
+# no motor para interpolar entre 1,5 % (mínimo funcional, região úmida) e
+# 3 % (teto seguro, seca severa).
+
+HYDROGEL_MIN_PCT: float = 0.015   # 1,5 % — mínimo funcional (sem déficit)
+HYDROGEL_MAX_PCT: float = 0.030   # 3,0 % — teto anti-encharcamento
+
 
 def calculate_hydrogel_dose_g(
     annual_precipitation_mm: Optional[float],
     species_min_precipitation: float,
 ) -> float:
+    """
+    Retorna a massa de hidrogel em pó (g) para incorporar no recheio da cápsula.
+
+    Parameters
+    ----------
+    annual_precipitation_mm   : precipitação anual local (coletor regional)
+    species_min_precipitation  : precipitação mínima da espécie (JSON)
+
+    Returns
+    -------
+    float em gramas, no intervalo [HYDROGEL_MIN_PCT, HYDROGEL_MAX_PCT] × CAPSULE_FILL_G
+    (≈ 0,23 g a 0,45 g para uma cápsula de 15 g de recheio)
+    """
     if annual_precipitation_mm is None or not species_min_precipitation:
-        return HYDROGEL_BASE_G
+        # Sem dados: usa 2 % como valor neutro intermediário
+        return round(0.020 * CAPSULE_FILL_G, 2)
     deficit          = max(0.0, species_min_precipitation - annual_precipitation_mm)
     relative_deficit = min(1.0, deficit / species_min_precipitation)
-    return round(HYDROGEL_BASE_G + relative_deficit * (HYDROGEL_MAX_G - HYDROGEL_BASE_G), 2)
+    pct              = HYDROGEL_MIN_PCT + relative_deficit * (HYDROGEL_MAX_PCT - HYDROGEL_MIN_PCT)
+    return round(pct * CAPSULE_FILL_G, 2)
 
 
 # --------------------------------------------------------------------------
@@ -212,7 +336,7 @@ def recommend_biocapsule(
     region_data: dict,
     biome_key: Optional[str] = None,
     species_path: Optional[str] = None,
-    soil_type: str = "yellow_latosol",
+    soil_type: str = "auto",
     capsules_per_m2: float = 4.0,
     top_n: int = 3,
 ) -> dict:
@@ -224,7 +348,7 @@ def recommend_biocapsule(
     region_data    : dict retornado por collect_all()
     biome_key      : chave do bioma (ex. "cerrado") — carrega data/species/<biome_key>.json
     species_path   : caminho explícito para o JSON de espécies (sobrepõe biome_key)
-    soil_type      : tipo de solo para a curva de biochar
+    soil_type      : tipo de solo para a curva de biochar ("auto" detecta por teor de areia)
     capsules_per_m2: densidade de plantio de cápsulas
     top_n          : quantas espécies retornar no ranking
 
@@ -237,20 +361,26 @@ def recommend_biocapsule(
 
     current_ph          = _extract_ph(region_data)
     annual_precipitation = _extract_annual_precipitation_mm(region_data)
+    
+    if soil_type == "auto":
+        sand = _extract_soil_property(region_data, "sand")
+        if sand is not None and sand >= 850:
+            soil_type_considered = "quartzarenic_neosol"
+        else:
+            soil_type_considered = "yellow_latosol"
+    else:
+        soil_type_considered = soil_type
+
+    region_biome = region_data.get("biome_and_vegetation", {}).get("biome", "").lower()
+    is_cerrado = "cerrado" in region_biome if region_biome else True
 
     recommendations = []
     for r in ranking:
-        full_sp     = next(s for s in species_list if s["common_name"] == r["species"])
-        target_ph   = full_sp["ph_min"]
-        biochar_t   = (
-            calculate_biochar_dose_t_ha(current_ph, target_ph, soil_type)
-            if current_ph is not None else None
-        )
-        biochar_g   = (
-            biochar_dose_per_capsule_g(biochar_t, capsules_per_m2)
-            if biochar_t is not None else None
-        )
-        hydrogel_g  = calculate_hydrogel_dose_g(annual_precipitation, full_sp["min_precipitation_mm_year"])
+        full_sp   = next(s for s in species_list if s["common_name"] == r["species"])
+        target_ph = (full_sp["ph_min"] + full_sp["ph_max"]) / 2.0
+
+        biochar_g  = calculate_biochar_dose_g(current_ph, target_ph)
+        hydrogel_g = calculate_hydrogel_dose_g(annual_precipitation, full_sp["min_precipitation_mm_year"])
 
         # ML_HOOK — ponto de extensão para a camada de aprendizado
         # Quando ml/train.py produzir um modelo, carregue-o aqui e
@@ -262,12 +392,19 @@ def recommend_biocapsule(
         recommendations.append({
             **r,
             "capsule_dosage": {
-                "biochar_g":             biochar_g,
-                "biochar_t_ha_equivalent": biochar_t,
-                "hydrogel_g":            hydrogel_g,
-                "soil_type_considered":  soil_type,
+                "biochar_g":    biochar_g,
+                "hydrogel_g":   hydrogel_g,
+                "capsule_fill_g": CAPSULE_FILL_G,
+                "biochar_pct_of_fill":  round(biochar_g / CAPSULE_FILL_G * 100, 1) if CAPSULE_FILL_G else None,
+                "hydrogel_pct_of_fill": round(hydrogel_g / CAPSULE_FILL_G * 100, 1) if CAPSULE_FILL_G else None,
+                "soil_type_considered": soil_type_considered,
+                "biochar_extrapolated_from_cerrado": not is_cerrado,
             },
         })
+
+    if not is_cerrado:
+        print("Aviso: A curva de dosagem de biochar utilizada e calibrada para o Cerrado. "
+              "Os resultados podem ser uma extrapolacao fragil para este bioma.")
 
     return {
         "point_soil_ph":              current_ph,

@@ -27,9 +27,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import os
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import rtdata as collector
-import motor_decision as engine
+from src.engine import decision as engine
 import motor_ai as ai
 
 
@@ -38,8 +43,8 @@ def main() -> None:
     parser.add_argument("lat", type=float, nargs="?")
     parser.add_argument("lon", type=float, nargs="?")
     parser.add_argument("--species", default="species.json")
-    parser.add_argument("--soil-type", default="yellow_latosol",
-                         choices=list(engine.BIOCHAR_CURVE_T_HA.keys()))
+    parser.add_argument("--soil-type", default="auto",
+                         choices=list(engine.BIOCHAR_CURVE_T_HA.keys()) + ["auto"])
     parser.add_argument("--capsules-per-m2", type=float, default=4.0)
     parser.add_argument("--radius", type=float, default=15.0)
     parser.add_argument("--top", type=int, default=3)

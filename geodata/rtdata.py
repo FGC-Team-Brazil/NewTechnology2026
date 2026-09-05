@@ -73,6 +73,15 @@ import requests
 
 from rtdash import save_dashboard
 
+# Centraliza .env e os caminhos locais usados tanto pela ingestão quanto pelo
+# dashboard. O fallback mantém o coletor utilizável como script independente.
+try:
+    from src.config import PROJECT_DIR as _PROJECT_DIR, WILDFIRE_DB_PATH as _CANONICAL_WILDFIRE_DB_PATH, load_env
+    load_env()
+except ImportError:
+    _PROJECT_DIR = None
+    _CANONICAL_WILDFIRE_DB_PATH = "data/local/queimadas_inpe.db"
+
 # --------------------------------------------------------------------------
 # General configuration
 # --------------------------------------------------------------------------
@@ -116,13 +125,13 @@ SOILGRIDS_CONVERSION = {
 #   https://www.ibge.gov.br/geociencias/informacoes-ambientais/vegetacao/15842-biomas.html
 # (export/reproject to GeoJSON if it comes as a shapefile).
 BIOMES_GEOJSON_PATH = os.environ.get(
-    "REVIVETECH_BIOMES_GEOJSON", "local_data/ibge_biomes.geojson"
+    "REVIVETECH_BIOMES_GEOJSON", "data/local/biomas_ibge.geojson"
 )
 
 # GeoJSON/shapefile of soil erosion risk (Embrapa GeoInfo):
 #   https://www.geoportal.cnptia.embrapa.br/
 EROSION_GEOJSON_PATH = os.environ.get(
-    "REVIVETECH_EROSION_GEOJSON", "local_data/embrapa_erosion_risk.geojson"
+    "REVIVETECH_EROSION_GEOJSON", "data/local/risco_erosao_embrapa.geojson"
 )
 
 # Database (SQLite) fed by Phase 1 of the project (automatic INPE download).
@@ -131,7 +140,7 @@ EROSION_GEOJSON_PATH = os.environ.get(
 # swap the sqlite3 connection for psycopg2/mysql-connector if the Phase 1
 # database is Postgres/MySQL.
 WILDFIRE_DB_PATH = os.environ.get(
-    "REVIVETECH_WILDFIRE_DB", "local_data/inpe_wildfires.db"
+    "REVIVETECH_WILDFIRE_DB", _CANONICAL_WILDFIRE_DB_PATH
 )
 
 # MapBiomas (land use and cover) via Google Earth Engine. Requires free

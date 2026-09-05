@@ -33,7 +33,10 @@ SPECIES_JSON_PATH = (
 
 from rtdata import collect_all, print_summary
 from rtdash import save_dashboard
-import motor_decision as engine
+import sys
+if str(PROJECT_DIR) not in sys.path:
+    sys.path.insert(0, str(PROJECT_DIR))
+from src.engine import decision as engine
 
 
 def remove_accents(text: str) -> str:

@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--skip-download", action="store_true",
-        help="Pula download/consolidação; usa planilha_fogos_consolidados.csv existente",
+        help="Pula download; ainda consolida o bioma selecionado a partir do cache local",
     )
     return parser.parse_args()
 
@@ -66,7 +66,7 @@ def main() -> None:
         print_recommendation,
         print_step,
     )
-    from src.processing.hotspot_filter import load_consolidated, filter_by_biome
+    from src.processing.hotspot_filter import BIOME_ALIASES, filter_by_biome, load_consolidated, normalize_biome_key
     from src.processing.enrichment import enrich_hotspot
     from src.engine.decision import recommend_biocapsule
     from src.output.exporter import open_dashboard, save_recommendation_json
@@ -86,19 +86,27 @@ def main() -> None:
             print_step("Download", 3, 1, f"Baixando focos do INPE (últimos {days} dias)")
             from src.ingestion.unify_hotspots import run as run_unify
             run_unify(days)
-
-            print_step("Consolidação", 3, 2, "Consolidando focos em incêndios reais")
-            from src.ingestion.consolidate import run as run_consolidate
-            run_consolidate()
+        else:
+            print("Sem download: reutilizando os CSVs e o cache local já importados.")
     else:
-        print("Pulando download/consolidação (--skip-download) — usando planilha existente.")
+        print("Pulando download (--skip-download) — reutilizando o cache local.")
+
+    # Esta etapa é sempre necessária: o usuário pode pedir um bioma que ainda
+    # não tenha sido consolidado, mesmo escolhendo não baixar dados novos.
+    print_step("Consolidação", 3, 2, f"Consolidando focos: {biome_label}")
+    from src.ingestion.consolidate import run as run_consolidate
+    run_consolidate(biome_key=None if biome_key == "all" else biome_key)
 
     # ------------------------------------------------------------------
     # ETAPA 2 — Filtro por bioma
     # ------------------------------------------------------------------
     print_step("Filtro", 3, 3, f"Carregando focos do bioma: {biome_label}")
-    df_all     = load_consolidated()
-    df_biome   = filter_by_biome(df_all, biome_key)
+    df_all = load_consolidated()
+    try:
+        df_biome = filter_by_biome(df_all, biome_key)
+    except ValueError as exc:
+        print(f"Erro no filtro de bioma: {exc}")
+        return
     print(f"{len(df_biome)} focos encontrados para o bioma {biome_label}.")
 
     # ------------------------------------------------------------------
@@ -123,9 +131,16 @@ def main() -> None:
     # ETAPA 5 — Recomendação de biocápsulas (motor determinístico)
     # ------------------------------------------------------------------
     print("\nCalculando recomendação de biocápsulas...")
+    recommendation_biome = biome_key
+    if biome_key == "all":
+        selected_biome = normalize_biome_key(str(row.get("bioma", "")))
+        recommendation_biome = BIOME_ALIASES.get(selected_biome, selected_biome)
+        if not recommendation_biome:
+            print("Não foi possível identificar o bioma do foco para a recomendação de sementes.")
+            return
     recommendation = recommend_biocapsule(
         region_data,
-        biome_key=biome_key,
+        biome_key=recommendation_biome,
     )
 
     print_recommendation(recommendation)

@@ -32,8 +32,8 @@ BIOME_ALIASES: dict[str, str] = {
 }
 
 
-def _normalize(text: str) -> str:
-    """Remove acentos e converte para minúsculas."""
+def normalize_biome_key(text: str) -> str:
+    """Remove acentos e converte um rótulo de bioma para chave interna."""
     return "".join(
         c for c in unicodedata.normalize("NFKD", str(text))
         if not unicodedata.combining(c)
@@ -76,17 +76,18 @@ def filter_by_biome(df: pd.DataFrame, biome_key: str) -> pd.DataFrame:
     Se o CSV não tiver coluna 'bioma' ou nenhum foco casar, retorna
     o df completo com um aviso.
     """
-    if "bioma" not in df.columns or df["bioma"].isna().all():
-        print(
-            f"Aviso: coluna 'bioma' ausente ou vazia no CSV — "
-            f"exibindo todos os {len(df)} focos.",
-        )
-        return df
+    if biome_key == "all":
+        result = df.copy()
+        result.attrs["biome_key"] = "all"
+        return result
 
-    normalized_key = _normalize(biome_key)
+    if "bioma" not in df.columns or df["bioma"].isna().all():
+        raise ValueError("A coluna 'bioma' está ausente ou vazia; não é seguro exibir focos de outro bioma.")
+
+    normalized_key = normalize_biome_key(biome_key)
 
     def _matches(val: str) -> bool:
-        normalized_val = _normalize(val)
+        normalized_val = normalize_biome_key(val)
         # Verifica alias direto
         mapped = BIOME_ALIASES.get(normalized_val, normalized_val)
         return mapped == normalized_key or normalized_val == normalized_key
@@ -95,12 +96,9 @@ def filter_by_biome(df: pd.DataFrame, biome_key: str) -> pd.DataFrame:
     filtered = df[mask].reset_index(drop=True)
 
     if filtered.empty:
-        print(
-            f"Aviso: nenhum foco encontrado para o bioma '{biome_key}' — "
-            f"exibindo todos os {len(df)} focos."
-        )
-        return df
+        raise ValueError(f"Nenhum foco encontrado para o bioma '{biome_key}'.")
 
+    filtered.attrs["biome_key"] = normalized_key
     return filtered
 
 
@@ -109,9 +107,9 @@ def search_hotspots(df: pd.DataFrame, term: str) -> pd.DataFrame:
     Filtra por município ou data (texto livre).
     Retorna df original se não encontrar nada.
     """
-    norm = _normalize(term)
+    norm = normalize_biome_key(term)
     result = df[
-        df["municipio"].astype(str).apply(_normalize).str.contains(norm, na=False)
+        df["municipio"].astype(str).apply(normalize_biome_key).str.contains(norm, na=False)
         | df["data_pura"].astype(str).str.contains(term, na=False)
     ].reset_index(drop=True)
     return result if not result.empty else df

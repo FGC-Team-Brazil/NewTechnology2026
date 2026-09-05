@@ -1,17 +1,7 @@
 [
-  {
-    "_comment": "TODO — Adicionar espécies nativas do Pantanal. Schema idêntico ao cerrado.json.",
-    "common_name": "TODO",
-    "scientific_name": "TODO",
-    "target_biome": "Pantanal",
-    "ph_min": null,
-    "ph_max": null,
-    "min_precipitation_mm_year": null,
-    "flammability_index": null,
-    "dormancy_mechanism": "TODO",
-    "barrier_formation_speed": null,
-    "socioeconomic_value": null,
-    "source": "TODO",
-    "values_confidence": {}
-  }
+  {"common_name":"Buriti","scientific_name":"Mauritia flexuosa","target_biome":"Pantanal","ph_min":5.0,"ph_max":6.0,"min_precipitation_mm_year":1200,"flammability_index":0.25,"dormancy_mechanism":"none","barrier_formation_speed":0.5,"socioeconomic_value":0.9,"source":"Silva et al. 2015, Palmeiras do Pantanal","values_confidence":{"ph":"medium","precipitation":"high","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"high"}},
+  {"common_name":"Ingá","scientific_name":"Inga edulis","target_biome":"Pantanal","ph_min":5.0,"ph_max":6.5,"min_precipitation_mm_year":1000,"flammability_index":0.3,"dormancy_mechanism":"none","barrier_formation_speed":0.7,"socioeconomic_value":0.8,"source":"Lorenzi 2002, Espécies Frutíferas do Pantanal","values_confidence":{"ph":"medium","precipitation":"medium","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"high"}},
+  {"common_name":"Manduvira","scientific_name":"Bactris major","target_biome":"Pantanal","ph_min":5.0,"ph_max":6.0,"min_precipitation_mm_year":1200,"flammability_index":0.3,"dormancy_mechanism":"none","barrier_formation_speed":0.4,"socioeconomic_value":0.5,"source":"Flora do Brasil 2020","values_confidence":{"ph":"medium","precipitation":"high","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"medium"}},
+  {"common_name":"Mamoeiro-do-campo","scientific_name":"Jacaratia spinosa","target_biome":"Pantanal","ph_min":5.0,"ph_max":6.5,"min_precipitation_mm_year":900,"flammability_index":0.2,"dormancy_mechanism":"none","barrier_formation_speed":0.6,"socioeconomic_value":0.8,"source":"Colecionando Frutas 2026","values_confidence":{"ph":"high","precipitation":"high","flammability":"low","dormancy":"high","barrier_formation_speed":"medium","socioeconomic_value":"medium"}},
+  {"common_name":"Bacuri","scientific_name":"Attalea phalerata","target_biome":"Pantanal","ph_min":5.0,"ph_max":6.5,"min_precipitation_mm_year":1200,"flammability_index":0.25,"dormancy_mechanism":"none","barrier_formation_speed":0.5,"socioeconomic_value":0.8,"source":"Espécie citada no material fornecido; valores replicados da ficha amazônica de Attalea phalerata — requer validação para Pantanal.","values_confidence":{"ph":"low","precipitation":"low","flammability":"low","dormancy":"medium","barrier_formation_speed":"low","socioeconomic_value":"medium"}}
 ]
