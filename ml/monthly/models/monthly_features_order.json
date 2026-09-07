@@ -1,0 +1,8 @@
+[
+  "is_galeria_or_water",
+  "tipo_cobertura",
+  "dias_sem_chuva_med",
+  "log1p_dias",
+  "estacao_seca",
+  "mes"
+]
