@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReviveTech — Recomendação de restauração pós-incêndio</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- topbar -->
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/logo.png" alt="ReviveTech" class="brand-mark" />
+        <div>
+          <div class="brand-name">REVIVETECH</div>
+          <div class="brand-sub">Restauração inteligente pós-incêndio</div>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span class="dot dot-leaf"></span>
+        pipeline main.py · v0.1
+      </div>
+    </header>
+
+    <!-- stepper -->
+    <nav class="stepper" id="stepper">
+      <div class="step-node" data-step="1">
+        <span class="step-circle">1</span>
+        <span class="step-name">Bioma</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-node" data-step="2">
+        <span class="step-circle">2</span>
+        <span class="step-name">Dados INPE</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-node" data-step="3">
+        <span class="step-circle">3</span>
+        <span class="step-name">Foco</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-node" data-step="4">
+        <span class="step-circle">4</span>
+        <span class="step-name">Enriquecimento</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-node" data-step="5">
+        <span class="step-circle">5</span>
+        <span class="step-name">Recomendação</span>
+      </div>
+    </nav>
+
+    <main class="content">
+
+      <!-- STEP 1 — bioma -->
+      <section class="step is-active" data-step="1">
+        <p class="step-kicker kicker-1">Etapa 1 de 5</p>
+        <h1 class="step-title">Selecione o bioma</h1>
+        <p class="step-sub">O filtro de focos e o motor de recomendação de biocápsulas são específicos por bioma.</p>
+
+        <div class="biome-grid" id="biome-grid"></div>
+      </section>
+
+      <!-- STEP 2 — dados INPE -->
+      <section class="step" data-step="2">
+        <p class="step-kicker kicker-2">Etapa 2 de 5</p>
+        <h1 class="step-title">Dados do INPE</h1>
+        <p class="step-sub">Deseja baixar os focos de incêndio mais recentes agora, ou reutilizar o cache local já consolidado?</p>
+
+        <div class="choice-row">
+          <button class="choice-card" id="download-yes">
+            <span class="choice-title">Baixar dados agora</span>
+            <span class="choice-desc">Consulta a API do INPE e consolida os focos mais recentes do bioma selecionado.</span>
+          </button>
+          <button class="choice-card" id="download-no">
+            <span class="choice-title">Usar cache local</span>
+            <span class="choice-desc">Equivalente a <code>--skip-download</code>: reaproveita os CSVs já importados.</span>
+          </button>
+        </div>
+
+        <div class="days-box" id="days-box" hidden>
+          <label class="label" for="days-input">Dias de histórico</label>
+          <input class="input input-narrow" id="days-input" type="number" min="1" max="90" value="30" />
+          <span class="hint">padrão: 30 dias</span>
+        </div>
+
+        <div class="step-actions">
+          <button class="ghost-btn" data-back="1">Voltar</button>
+          <button class="primary-btn" id="consolidate-btn" disabled>Consolidar e continuar</button>
+        </div>
+      </section>
+
+      <!-- STEP 3 — lista de focos -->
+      <section class="step" data-step="3">
+        <p class="step-kicker kicker-3">Etapa 3 de 5</p>
+        <h1 class="step-title">Focos encontrados</h1>
+        <p class="step-sub" id="hotspot-summary">—</p>
+
+        <div class="hotspot-table-wrap">
+          <table class="hotspot-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Data/hora</th>
+                <th>Lat</th>
+                <th>Lon</th>
+                <th>Município/UF</th>
+                <th>Satélite</th>
+                <th>Confiança</th>
+              </tr>
+            </thead>
+            <tbody id="hotspot-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="step-actions">
+          <button class="ghost-btn" data-back="2">Voltar</button>
+          <button class="primary-btn" id="select-hotspot-btn" disabled>Selecionar foco</button>
+        </div>
+      </section>
+
+      <!-- STEP 4 — enriquecimento (auto) -->
+      <section class="step" data-step="4">
+        <p class="step-kicker kicker-4">Etapa 4 de 5</p>
+        <h1 class="step-title">Enriquecendo dados do foco</h1>
+        <p class="step-sub">Coletando informações externas para a região selecionada — sem gargalo de I/O.</p>
+
+        <ul class="enrich-list" id="enrich-list"></ul>
+      </section>
+
+      <!-- STEP 5 — resultado -->
+      <section class="step" data-step="5">
+        <div class="result-header">
+          <div>
+            <p class="step-kicker kicker-5">Etapa 5 de 5</p>
+            <h1 class="step-title">Recomendação de biocápsulas</h1>
+            <p class="step-sub" id="result-sub">—</p>
+          </div>
+          <div class="export-row">
+            <button class="ghost-btn" id="export-json">Baixar JSON</button>
+            <button class="ghost-btn" id="export-csv">Baixar CSV</button>
+            <button class="primary-btn" id="restart-btn">Novo foco</button>
+          </div>
+        </div>
+
+        <div class="result-grid">
+
+          <div class="card">
+            <h2 class="card-title">Espécies recomendadas</h2>
+            <div class="species-list" id="species-list"></div>
+            <div class="dose-summary" id="dose-summary"></div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Dados enriquecidos da região</h2>
+            <div class="factor-grid" id="result-factor-grid"></div>
+          </div>
+
+          <div class="card card-map">
+            <h2 class="card-title">Localização do foco</h2>
+            <div class="map-frame" id="map-frame"></div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
